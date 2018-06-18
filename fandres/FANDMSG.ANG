@@ -1,0 +1,697 @@
+9999 Message $ is missing in FAND.RES
+0000
+0001
+0002 FM0002//Develop program/Run program/Install program/Text editor/MS Dos/Exit
+0003 To return into FAND use EXIT
+0004 FM004//Printout/Report incl. totals/Totals/Incorrect records
+0005 Program is always .RDB type
+0006 Text editor
+0007 Data editor
+0008 FM0008//Catalog/Users/New password
+0009 Nonexistent chapter U  (or syntax error in chapter U)
+0010 (ESC)  Set printer!
+0011 (ESC)  Load paper into printer!
+0012 (ESC)  Switch on printer!
+0013 (ESC)  Connect printer!
+0014 FM0014//Run program/Installing program/Text editor/MS Dos/Exit
+0015 >> now working .. <<
+0016 No next record
+0017 Page  :
+0018 Incorrect records
+0019 Select file to report
+0020 Number of records:
+0021 Break Y/N?
+0022 Stop printing Y/N?
+0023 Stop searching Y/N?
+0024 Stop compiling report Y/N?
+0025 Select items for sorting
+0026 Number of incorrect records:
+0034 Select program
+0035 Select file
+0036 Select items
+0037 Select control items
+0038 Select totalled items
+0039 Generate declaration according to physical file Y/N?
+0040      licence number
+0041 Programmer's version  4.2
+0042 User's version 4.2
+0043 DEMO version 4.2
+0044 Beta version 4.2
+0045 FM0045/Keyboard/Original/Czech/Czech amateur/Slovak/German amateur
+0046 FM0046/Select printer
+0047 End of validation test version !
+0048 20
+0049 41
+0050 YN
+0051 TxtPos:F,4.0;Verify:B;OldText:T;Type:A,'!';Name:A,12;Text:T,
+0052 TaskName:A,8;FileName:A,8;Ar:N,2;Path:A,79;Label:A,11
+0053 #L Type in [' ','I','F','M','R','P','E','U','H','D','L']
+0054 #L (trailchar(' ',Label)<>''<=>upcase(copy(Path,1,2))in['A:','B:'
+0055 ])|trailchar(' ',Label) in ['#','##','#R','#r','#SQL']:'Label on A:,B:
+0056 A:A,35;T:T
+0057 FANDHLP.000 file is missing
+0058 MAIN procedure is missing
+0059 Correct Y/N?
+0060 name don't contains space
+0061 !!! Computed text !!!
+0062 FM0062/set up printer !
+0063 !!! included text !!!
+
+
+     -----data editor ------------------
+0100 FM0100/Switch on - off/Subset/Duplication/Tabelator/Additive changes/Checks/Varnings
+0101 FM0101/Switch on - off/Subset/Duplication/Tabelator/Varnings
+0102 FM0102/Switch on - off/Subset/Duplication/Tabelator/Additive changes/Varnings
+0103 FM0103/Switch on - off/Subset/Duplication/Tabelator/Checks/Varnings
+0104 FM0104/Switch on - off/Tabelator/Checks/Varnings
+0105 FM0105//Printout/Checks/New subset/Graph/Sort
+0106 FM0106//Printout/Checks/New subset/Graph
+0107 Selected subset of $ file is empty
+0108 Restore old contents Y/N?
+0109 Delete record Y/N?
+0110 $
+0111 File has no own key
+0112 Last record has been deleted, exiting
+0113 Select subset of records:
+0114 Calculate:
+0115 $ file is empty
+0116 (ESC) Delete whole subset of records Y/N?
+0117 Line:/name:
+0118 The record does not exist
+0119 In $ file is no record to add to
+0120 No errors from here to the end
+0121 Overwrite item Y/N?
+0122 Record No:
+0123               F2-edit  F4-dupl.   F5-switch  F7-file  F9-save
+0124  F2-enter F3-srch F4-dupl F5-switch F6-action F7-file F9-save   Ctrl F1 PgUp PgDn  
+0125  Ctrl:    F3-rec.  F5-calc.  F8-diagnostics  F9-execute  F10-close
+0126                       F6-print  F9-save                   Ctrl F1 PgUp PgDn  
+0127  Ctrl:    F3-record   F4-accept   F5-calc.   F7-subord.file
+0128   F3-srch  F4-dupl  F5-switch  F6-action  F7-file  F9-save   Ctrl F1 PgUp PgDn  
+0129            F4-dupl  F5-switch  F7-file  F9-save             Ctrl F1 PgUp PgDn  
+0130               F5-switch  F7-file  F9-save        Ctrl F1 PgUp PgDn
+0131  Ctrl:    F5-calcul   F8-diagnostics   F9-executing   F1 Home End
+0132 Create record in $ file Y/N?
+0133 Lock program by password Y/N?
+0134                    F2-select    F3-delete   F9-order                 
+0135           F2-ascending    F3-delete    F9-order   >-descending          
+0136 Synt. O.K.; memory: super $, files $, chapter $, free $
+0137 Exit editor Y/N?
+0138 Name must be identifier
+0139 Mismatched old/new declaration. (Eg. type B,T in .DTA, type N in .DBF)
+0140 Inacceptable (different type, calc. item or changes forbidden)
+0141                            F9-save                      Ctrl F1 PgUp PgDn  
+0142     F1-help index    F10-previous help    F6-print     Ctrl   PgUp PgDn
+0143  Ctrl:     F3-line     F5-calculation      F6-Printing from current position
+0144                            Ù-accept key value                          PgUp PgDn
+0145  Ctrl:                                                Home End
+0146 '$' password missing in $ file
+0147 (ESC) Create copy of source program Y/N?
+0148 Record has been deleted, change impossible  (CtrlF2 refresh)
+0149 Record has been changed by other program. Start again.
+0150 Record has been changed and belongs in subset never more (CtrlF2 refresh)
+0151  Ctrl:                           F5-calculation
+0152                                 Ù-select                                  
+0153 Help name:
+0154  Ctrl:          F4-accept   F5-calculation   F7-subord.file
+0155 Composite key is too long. No sort follows.
+0156 no field for showing
+0157 save changed text to clipboard Y/N?
+0158 Unfinished record will be remove ! Quit edit Y/N?
+0159              >>   report is empty   <<
+
+  ------------ graph ----------------------------------
+
+0201 $ Error at graph mode initialization
+0202 $ file not found
+0203 PCX ($) display error
+0204 Missing $ item
+0205 Negative value forbidden for circle or stacked graph
+0206 Type of $ item incorrect
+...
+0208 Incorrect $ parameter in parameter $=
+...
+0210 Input file has not been defined
+0211 $ file has not been declared
+0212 $ item has not been declared in file
+0213 Write error at PCX ($) file
+0214 Write to PCX file Y/N?
+...
+0220 FM0220/GRAPH/Inputs/Type,colors,filling/Switches/Setup print/File of param./Axes descr./Windows,texts/Display
+0221 FM0221//Bar/Circle/Line/Poly.regression/Group bar/Group line/Stacked/3D bar/3D line
+0229 FM0229//File and items/Select records/Span of values
+0230 FM0230//Items/Selecting records/Span of values
+0231 FM0231//Graph type/Filling/Shape/Width/Polynomial grade/Order change of colors/Definition of colors
+0233 FM0233//Outline/Colors/Pattern/Colors+pattern/Monochrom
+0235 FM0235//1. (cylinder, ribbon)/2. (pyramid,area)/3. (rect.parallel.,scene)
+0237 FM0237//10 %/20 %/30 %/40 %/50 %/60 %/70 %/80 %/90 %/100 %
+0240 Polynomial grade:
+0241 FM0241//Title/X-axis/Y-axis/Z-axis/Direction of X-axis description
+0242 Writing values - number of decimals
+0243 Title:
+0244 Head of X-axis:
+0245 Head of Y-axis:
+0246 Head of Z-axis:
+0247 FM0247//0  Item Z0/1st Item/2nd Item/3rd Item/4th Item/5th Item/6th Item/7th Item/8th Item/9th Item
+0249 Name of Z item
+0250 Exit Graph (Y/N)?
+0251 Read error on parameter file of $
+0252 Communication
+0253 File items
+0254 Initial record
+0255 Maximum 25000 records
+0256 Number of records
+0257 Max. value on Y-axis
+0258 Min. value on Y-axis
+0259 Minimum must not be greater than maximum
+0260 FM0260//Grid/Export into graph file/Graph into window
+0262 FM0262//Horizontally/Vertically/Inside  graph
+0264 FM0264//Switched on/Switched off/Values in graph/Value format
+0266 Files
+0268 FM0268/Entering menu/Switched on/Switched off
+0270 FM0270/Box/Switched on/Switched off
+0272 FM0272//Switched on +/Switched off
+0273 FM0272//Switched on /Switched off +
+0274 Existing file - overwrite (Y/N) ?
+0275 FM0275//Quality/Direction/Density/Horiz. /Vert. offset/Form feed/Delay
+0276 Graph print not supported for Print Manager
+0280 FM0280//Horizontally/Vertically
+0282 FM0282//1 60 dpi/2 120 dpi/3 240 dpi
+0283 FM0283//Switched on/Switched of
+0284 FM0284/(cm)/0/1/2/3/4/5/6/7/8/9
+0286 FM0286/(lines)/0/1/2/3/4/5/6/7/8/9
+0287 FM0287//Common D (draft)/Medium M (NLQ)/High H
+0289 FM0289//Switched on/Switched of
+0290 FM0290//Name/Read/Write/PCX-display
+0292 Existing file of parameters - overwrite (Y/N)?
+0293 Write error at file of parameters
+0294 Too many windows open, opening other text window impossible
+0295 Write error at file $
+0296 FM0296//Text/Window
+0297 Window
+...
+0299 Background
+0300 Axis
+0301 Parameters
+0302 Inputs
+0303 Type
+0304 File
+0305 Color
+0306 Direction
+0307 Grid
+0308 Width
+0309 Print
+0310 Box
+0312 Colors
+0313 File for parameters
+0314 Text beginning X:     Y:          Font size:            Color:
+0315 Window: -begin.X:   Y:    -end   X:   Y:    Color: -backg.:    -fonts:
+0316 Editing text
+0317 Line movement
+0318 Arrow up
+0319 Arrow down
+0320 Entering to line
+0321 Exit
+0322 Texts and windows
+0323 Previous
+0324 Next
+0325 Editing
+0326 Adding new
+0327 Deleting
+0328 FM0328//Dark/Light/Mixing @
+0329 L black/B blue/G green/C cyan/R red/M magenta/O brown/A gray
+0330 FM0330/Color definition/L black/B blue/G green/C cyan/R red/M magenta/O brown/A grey
+0331 FM0331/Color definition/L black/B blue/G green/C cyan/R red/M magenta/Y yellow/W white
+0332 A grey/B blue/G green/C cyan/R red/M magenta/Y yellow/W white
+0333 (-1 ... default color setting)
+0334 Dark
+0335 Light
+
+     -----  text editor -------------
+
+0400 Reading from file
+0401 Writing into file
+0402 Too long line, divide  (Y/N)?
+...
+0404 Too long text, not enough memory
+0405 search:
+0406 conditions:
+0407 replace:
+0408 (ESC) replace Y/N?
+0409 right margin:
+0410 left margin:
+0411   Ins
+0412 Ovrwr
+0413   Par
+0414  Form
+0415 Align
+0416            View
+0417   Col
+0418 Too long block (must be <= 28kB)
+0419 Too long expression, exceeds line
+0420 Line number:
+
+    ------- runtime errors   ------
+...
+0601 Nonexistent (DML) file $
+0602 Nonexistent item $ in (DML) file $
+0603 Nonexistent connection (DML) files $ a $
+0604 (DML) insufficient memory
+0605 nonexistent $ program
+0606 program $ exited due to error
+0607 File $ unsorted
+0608 (DML) file $ has no key, or has no alias '$'
+0609 Link($[recno],$)  nonexistent record number
+0610 Insufficent free memory for $ program
+0611 Edit(..owner=..) nonexistent record number
+0612 (DML) missing _reset/_rewrite for $ file
+0613 Writerec($,key) nonexistent key value
+0614 (DML) reading out of the $ file range
+0615 (DML) illegal seek in $ file
+0616 Password-locked file $
+0617 Number -$ to $
+0618 Date/time in '$' format
+0619 (DML) wrong FANDDML version
+0620 $ program cannot be created (limit in Config.Sys?)
+0621 $ directory cannot be deleted
+0622 Error in $ program
+0623 Chapters 'D','U' have no name; chap. 'U' must be the first in main program
+0624 Out of memory
+0625 Stack overflow (too deep recursion, simplify expressions)
+0626 Internal $ FAND error at $ address
+0627 $[recno].$:=   index argument and record are not deleted
+0628 Enter password
+0629 Password-locked program.
+0630 Undebugged program $
+0631 Nonexistent $ program
+0632 Program $ does not contain $ procedure
+0633 (DML) illegal deleterec for $
+0634 (DML) illegal recallrec for $
+0635 (DML) key value has no so many arguments, or type discrepancy
+0636 menu/menubar too large
+0637 To be sure, write again
+0638 Wrong keyword, try again
+0639 expect floating-point number
+0640 $[recno].$  nonexistent record number
+0641 Readrec/writerec($,n) nonexistent record number
+0642 Isdeleted($,recno) nonexistent record number
+0643 Graph mode support for 80 x 25 only; not for CGA
+0644 directory $ can't create
+0645 $ forall without ! changes indexes
+0646 $ cannot be called as program
+0647 Uncompiled chapters in program (locked by password or RdOnly)
+0648 Read error on FAND.OVR
+0649 Duplicate chapter declaration
+0650 forall updates $.SQL file without key
+0651 (DML) _file cannot be used for $.SQL file
+0652 $.SQL without key file cannot be edited
+0653 Item format: '$'
+0654 This version of PC FAND not supported .SQL files
+0655 Volume label read error; format diskette (Y/N) ?
+0656 Unit $ failure:
+0657 $ bad sectors on diskette
+0658 Unknown media type, cannot format
+0659 This version of PC FAND not supported chapters F
+0660 $  copyfile to itself
+0661 Chapter $ larger than 65000 B after inclusion {$$include ..}
+0662 record don't have removed while exist linked records
+0663 edit(..sel=..) incorrect sort index
+0664 Compiled chapter F (excl. #U,#L,#I,#D) larger than 65000 B
+
+   ---------- MS-DOS error mesages ----------
+0701 $ disk full
+0702 File $ not found
+0703 Path $ not found
+0704 $ increase FILES in CONFIG.SYS (LAN:server,share.cfg)
+0705 Access to the file $ locked (RdOnly|LAN:missing #)
+0706 Fatal error: incorrect handle
+0707 Fatal error: memory cb destroyed
+0708 DOS insufficient memory
+0709 Fatal error: invalid memory cb address
+0712 Invalid access code
+0713 Invalid data
+0715 Invalid drive
+0721 Disk drive for $ file disabled
+0719 Disk drive failure for $ file
+0731 Hardware failure
+0779 $ ReadOnly cannot be deleted
+0780 $ existing, overwrite Y/N?
+0799 Temporary internal file
+
+0800 $ Read disk error
+0801 $ disk full
+....
+0807 Unlabelled diskette, overwrite (deletes files on diskette!!) Y/N?
+0808 (ESC) insert into $: diskette $
+0809 Diskette has no label
+0810 Diskette read error
+0811 Directory read error for $
+0812 In $: '$' cannot be inserted (active files on '$')
+0813 From $: diskette cannot be removed (active RDB on it)
+0814 Delete file $ Y/N?
+0815 Deleted in catalog, delete also physically Y/N?
+0816 Diskette label is $, overwrite (deletes files on diskette!!) Y/N?
+0817 Diskette label is $
+0818 Remove diskette $ from unit $:
+0819 Missing index file for $
+0820 Duplicate key $
+0821 $.nrecs:= for indexed file
+0822 Duplicate key in file $
+0823 Record does not meet the selected subset
+0824 file is shared !!!! change Y/N?
+0825 File $ locked ($), trying again
+0826 Record locked, trying again
+0827 File $ cannot be deleted
+0828 Records with duplicate key in file $ will be deleted
+0829 File $ cannot be renamed to $
+0830 Indexes $ inconsistent (creating again)
+0831 Indexes $ inconsistent   831
+0832 $ delete records with duplicate key /N?
+0833 Indexes $ inconsistent   833
+0834 Indexes $ inconsistent   834
+0835 Indexes $ inconsistent   835
+0836 File is shared !!!! delete Y/N?
+0837 Indexes $ inconsistent   837
+0838 Font load error
+0839 Record $ of file $ locked, trying again
+0840 can't open directory '$' instead file
+...
+0842 file $ is shared and runtime is't LAN-version
+...
+0850 $: Write protected diskette
+0852 $  Drive not ready
+0854 $  CRC error in data
+0855 $  Bad drive request structure length
+0856 $  Disk seek error
+0857 $  Unknown media type
+0858 $  Sector not found
+0860 $  Device write failure
+0861 $  Device read failure
+0862 $  Hardware failure
+0863 $  Sharing violation
+...   867  unknown LAN[tastic] (?) error
+0876 (LAN) $ Disk full
+
+0881 Program name must be identifier
+0882 $ too short; header correction Y/N?
+0883 $ and declaration mismatched
+0884 FAND demo - version supports  max. 30 DOS files and 100 records
+0885 Change file heading according to declaration? (risk!) Y/N?
+0886 Record number obtaines from file lenght (wrong records at the end, may be)
+0887 Error $ (overflow max. count pages in index)
+0888 Error $ (chain of pages; autom.correction)
+0889 Error $ (position/length of text; autom.correction)
+0890 Error $ (long text string; adding spaces)
+0891 Error $ (position/length of text; replacing by spaces)
+...
+0893 $ inconsistent title (autom.correction)
+
+0901 PC FAND error (SetExit)
+0902 PC FAND error (OsShell-MemFun)
+0903 PC FAND error (XFNotValid)
+0904 backupm: reading directory $ error
+...
+
+
+     ----- Compilation error messages --------------
+
+1001 Expected
+1002 Long name
+1003 Long item
+1004 Number
+1005 Name
+1006 Long constant
+1007 Wrong constant or syntax error
+1008 Non-declared item name
+1009 Non-declared or unvisible name of file/role
+1010 Mismatched type
+1011 Missing '}' or {$$endif}
+1012 Imcompatible type
+1013 Text in apostrophes
+1014 Stored item expected
+1015 Character in apostrophes expected
+1016 Text constant expected
+1017 Missing trailing apostrophe
+1018 Logical type expected
+1019 Text type expected
+1020 Numeric type expected
+1021 Number 0..10 expected
+1022 Missing merge items at first file
+1024 File has no keys
+1025 Chapter F of original has not been compiled, or using different version
+1026 Declared twice
+1027 Item of the same file expected
+1028 Invalid sum
+1029 Name expected
+1030 Imcompatible number of items
+1031 Cannot connect and rewrite simultaneously
+1032 Cannot connect at update "in place"
+1033 Keyword '$'expected
+1034 Instructions expected
+1035 Type B,T does not exist for .DTA
+1036 Type F has max. 11 digits for .DTA
+1037 Nonexistent chapter
+...
+1039 'boolean','real' or 'string'expected
+1040 End expected
+1041 Local variables and spec. functions cannot be used in sum or with Ii
+1042 'true' or 'false' expected
+1043 Non-declared  or non-displayed item
+1044 Invalid parameter
+1045 Expected cond=,mode=,ctrl=,sum=,assign=,times=,head=,width=,sort=
+1046 No control item
+1047 File name expected
+...
+1049 'onlysum' or 'errcheck' expected
+1050 'compressed' or 'normal' expected
+1051 parameters cond=,sort=,ctrl=,sum= don't use without file definition
+1052 Head=TypeTGlobalVariable, nocancel or append expected
+1053 /FIX /VAR or /TXT expected
+1054 .line:= or .page:= expected
+1056 .pagesize,.pagelimit expected
+1057  #RH,#RF,#PH,#PF,#CH,#CF,#DH,#DE expected
+1059 Items for sum are not from the same level
+1060 Autosort (!), item list missing
+1061 Incorrect numbering
+1062 Nonexistent input file of this number
+1063 Global variable, file.nrecs|size or file.lastupdate expected
+1064 Global variable or file.nrecs expected
+1065 Prompt does not allow typ T
+1066 Syntax error - { #C | #K }  #A  #U  #D  #L  #I expected
+1067 Invalid file name
+1068 Duplicate file name
+1069 Write for time ____:__ or ____:__:__ or  ____:__:__.__
+1070 Numeric or text type expected
+1071 Write for date __.__.__ or __.__.____
+1072 Only local or global variables can be changed at _dummy
+1073 Output masks must be identical for repeated groups of items
+1074 Sum inside sum is denied
+1075 Nonexistent function name
+1076 Missing #, list of items and record layout
+1077 Duplicate order number
+...
+1079 $ underscores for item $ expected
+1080 @ in mask for numeric or string type only
+1081 Form page without items
+1082 Missing #I_file
+1083 Defin. text cannot be declared at .RDB file
+1084 Type T item cannot be used for sorting, nor in key
+1085 O. ItemName cannot be used in _dummy
+1086 Stored fields of type N, R do not exist in .DBF file
+1087 Item $ not declared in $ file
+1088 Missing entry in catalog < ARCHIVES, this name >
+1089 #Ii_FileName expected
+1090 #Oi_FileName , #O_FileName or #O*_Filename expected
+1091 Join #O*_FileName cannot be combined with #Oi_FileName
+1092 Expected !! ^y ?y ?e ^n F1 F2 F3 01 #A #L <= ?? r2 24 co wx s7 li
+...
+1094 Lexical comparison for text type only
+1095 End of mask expected
+1096 $ file not in catalog
+1097 File cannot be data type
+1098 Only one entry in catalog
+1099 O. ItemName is not allowed here
+1100 NoExcl,NoDel,NoCr,Rd,Wr,Cr,Del,Excl expected
+1101 Nocancel,freemem,loadfont,textmode expected
+1102 Exceedes screen
+1103 Journal must not have extensions .X, .DBF, .RDB ...
+
+1104 .X type (like original) expected
+1105 Long key (max. 123 byte)
+1106 Like/journalof incompatible with .RDB, .DTA, CATALOG, [original]
+1107 Missing own key in .X file
+1108 File has no indexes
+1109 @ or alias expected
+1110 Unknown identifier
+...
+1113 Short Item
+1114 No user' view
+1115 Number >=1 expected
+1116 Connection of files unsuitable to "owner" type relation
+1117 Empty resulting set of items
+1118 "Key in" only for .X file and reading by index (without owner=)
+1119 Calling procedure, number or parameter type mishmatched
+1120 ^a,^b,^d,^e,^q,^s,^w expected
+1121 Invalid for active RDB
+1122 Local variable expected
+1123 >30 arguments
+1124 One letter expected
+1125 Invalid parameter of edit command
+1126 Total lenght of items > 255 byte
+1127 Cannot be used for .RDB
+1128 Two-item (type A and T) file expected
+1129 Valid key name (see documentation) expected
+1130 Assign= or edit expected
+1131 Window, shared, locked or graphics expected
+1132 Program has no .HLP file
+1133 Number 0..255 expected
+...
+1135 Left side item in #A cannot be argument of a key
+1136 Expected 0,1,2,3 (working day, Saturday, Sunday, holiday)
+1137 Expected 'boolean','real','string' or 'record|index of FileName'
+...
+1139 Invalid conversion type (format combination for copyfile)
+1140 don't use local variable of type index or file here
+1141 Record-variable expected
+1142 'KL','LK','KN','LN','LW','KW' or 'WL' expected
+1143 Record-variable canot be used in an expression
+1144 Report cannot be called with record condition or for record-variable
+1145 Missing report declaration
+1146 Local variable of real type expected
+1147 Local or global variable expected
+1148 File has key with calculated arguments (! not allowed)
+1149 Record-variable belongs to another file
+...
+1152 Foreign key ($) with "!" does not suit to owner, or has calculated value
+1153 Connection with s "!" requires unambigous own key in superior file
+1154 Files are not connected with foreign key
+1155 Not allowed for .SQL files
+1156 .SQL files cannot be used at input and output simultaneously
+1157 Head=,foot=,mode=,delim= expected
+1158 {$$ifdef X} {$$ifndef X} {$$else} {$$endif} {$$define X..} {$$copy Name} expected
+1159 Check nesting of compiler directives
+1160 Overwr=, indent=, wrap=, align=, left=, right= expected
+1161 ww=(.),txtpos=,exit=(.),head=,last=,ctrl=,alt=,shift=,noedit expected
+1162 File type in procedure only
+1163 Name of parameter of file type must be file
+1164 Local variable of index type belongs to another file
+1165 Local variable of index type expected
+1167 Cond=, sort= expected
+1168 Var-parameter must be of boolean, string, or real type
+1169 checkfile not supported .DBF,.DTA
+1170 .SQL type file and item of type T expected
+1171 Mask syntax error
+1172 Merge to itself cannot be used for .SQL files
+1173 Getindex(...sort=...) cannot be used for index-parametr
+1174 function does't allowe var-parameter
+1175 parameter sort= can only use if sort isn't on index declaration
+1176 Can use only if sort is on index declaration
+1177 Expect local variable of type record or index
+1178 Sort of index is incorrect
+1179 Owner= don't use with selection (key in ..) or ('SQL-text')
+1180 Countowned() can use only with link to next record-variable
+1181 Owner=index and sorting  don't correspond to link
+1182 Link don't exist or is't type of owner
+1183 Expect '0'
+1184 In sel= don't use same index as in File/Index
+1185 Expect .X nebo .DBF
+
+
+      -----------  PROLOG COMPILER MESSAGES  --------------
+....
+1503 '}' missing
+1504 Missing hexadecimal digit
+1505 Multiple declared
+1506 ":-" expected
+1507 Variable type: $, expected type $
+1508 "_" is not allowed here
+1509 Variable has not been assigned a value
+1510 Type mismatch
+1511 Variable expected
+1512 Undeclared name
+1513 Predicate name expected
+1514 Type name  must begin with a capital letter
+1515 Function or const names must begin with a capital letter
+1516 Missing declaration fot "$" type
+1517 Type name expected
+1518 Predicate name  must begin with a small letter
+1519 More than 15 arguments
+1520 Variable "$" has not been assigned a value, for the present
+1521 Value of variable "$" is not used
+1522 Missing predicate "$" definition
+1523 Unassigned variable expected
+1524 =,<,>,<=,>=,<> expected
+1525 number expected
+1526 database predicate expected
+1527 Too long database predicate
+1528 Invalid type for FAND procedure
+1529 Clause cannot be defined for predicate
+1530 Int_real(..) requires (io) or (oi)
+1531 Database name expected
+1532 Database $ exceedes 65000 B
+1533 Error consult($) .. mismatched definition and saved records
+1534 concat(..) requires (iio),(ooi),(ioi),(oii) or (iii)
+...
+1537 Type T item expected
+1538 <,>,<=,>=  only for type Integer or Real
+1539 File does not exist in compiled chapter L
+1540 Expression without assigned constant cannot be used
+1541 Database predicate (excl. FAND files) does not allowe LongStr
+...
+1543 Type LongStr used in database term
+1544 Compiled L program exceeds 65000 B
+1545 Lproc($, $...) and  predicate does not exist, or has arguments
+1546 Invalid predicate under not(..)
+1547 Output parameters under not(..) _ only
+1548 L_Name is not list type
+1549 Constant declaration does not allow operations
+1550 Don't use autorecursion with this predicate
+1551 2nd !-parametr have to have same domain and have to be defined as output
+1552 first parameter have to be input
+1553 Expect matched presence every variable (input+output)
+1554 Program $ not exists
+1555 fandfield(..) and fandlink(..) need (iooo..) or (iioo..)
+1556 autorekursion for scalar type (Integer,String... ) undefined
+1557 output parameter isn't scalar or list type
+1558 Expect variable of String type (for first - Integer)
+1559 Don't alloved for predicate with output parameters
+1560 Expect character inside strokes
+1561 Expect unassociated output variable of type L_xxx
+1562 Only for predicate (i....io)
+
+
+     ---------  SQL SERVER messages  ----------------------------------
+2000 SQL  server  login  error : non-active Novell IPX
+2001 SQL  server  login  error : cannot open IPX socket
+2002 SQL  server  login  error : no or wrong response from FAND server
+2003 SQL  server  login  error : maximum count of clients exceeded
+2004 SQL server communication: missing response on (repeated) block transmission
+2005 SQL server communication: block transmission error
+2006 Block input error
+2007 SQL server communication: timeout waiting for next request block
+2008 Confirmation block error
+2009 Request block error
+2010 SQL server communication: incorrect message length
+2011 SQL server communication: maximum count of streams exceeded
+2012 Data block error/misplaced block
+2013 Nonexistent stream number
+2014 Inconsistent block
+2015 SQL server communication: timeout receiving data
+....
+2020 Syntax error in  SQL command
+
+     --------------------  PROLOG  nadstavba  --------------------------
+
+3000 $
+3001 Expect '$'
+3002 Expect identifier
+3003 Undefined word
+3004 Expect file name
+3005 Expect field name from file $
+3006 Expect role name (foreign key) of file $
+3007 Syntaxe parser can't concate segments ( separate '|')
+3008 Not allowed character '$'
+3009 Syntax error
+3010 Expect #A,#G,#O or #R
+...
+3012 For '$' unknow '$'

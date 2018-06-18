@@ -1,0 +1,699 @@
+9999 zpr va $ chyb¡ ve FAND.RES
+0000
+0001
+0002 FM0002//Ladit £lohu/Prov‚st £lohu/Instalace £lohy/Editace textu/Dos/Konec
+0003 N vrat do FANDu p©¡kazem EXIT
+0004 FM004//Opis vˆt/Sou‡t.sestava/Tot ly/Chybn‚ vˆty
+0005 £loha m  v‘dy typ .RDB
+0006 textov˜ editor
+0007 datov˜ editor
+0008 FM0008//Katalog/U‘ivatel‚/Nov‚ heslo
+0009 neexist. kapitola U  (resp. chyba syntaxe v kapitole U)
+0010 (ESC)  nastavte tisk rnu!
+0011 (ESC)  zalo‘te pap¡r do tisk rny!
+0012 (ESC)  zapnˆte tisk rnu!
+0013 (ESC)  p©ipojte tisk rnu!
+0014 FM0014//Prov‚st £lohu/Instalace £lohy/Editace textu/Dos/Konec
+0015 >> pracuji <<
+0016 nen¡ dal¨¡ vˆta
+0017 strana:
+0018 chybn‚ vˆty
+0019 vyberte soubor pro sestavu
+0020 po‡et vˆt:
+0021 p©eru¨it A/N?
+0022 p©eru¨it tisk A/N?
+0023 p©eru¨it hled n¡ A/N?
+0024 p©eru¨it tvorbu sestavy A/N?
+0025 vyberte £daje pro t©¡dˆn¡
+0026 po‡et chybn˜ch vˆt:
+0034 vyberte £lohu
+0035 vyberte soubor
+0036 vyberte £daje
+0037 vyberte ©¡d¡c¡ £daje
+0038 vyberte sou‡tovan‚ £daje
+0039 generovat deklarace $ podle fyzick‚ho souboru A/N?
+0040      licen‡n¡ ‡¡slo
+0041 program torsk  verze 4.2
+0042 u‘ivatelsk  verze 4.2
+0043 demonstra‡n¡ verze 4.2
+0044 zku¨ebn¡ verze 4.2
+0045 FM0045/kl vesnice/P–vodn¡/€esk /Amat‚rsk  ‡esk /Slovensk /Nˆmeck  amat.
+0046 FM0046/vyber tisk rnu
+0047 Konec platnosti testovac¡ verze !
+0048 20
+0049 41
+0050 AN
+0051 TxtPos:F,4.0;Overit:B;StText:T;Typ:A,'!';Nazev:A,12;Text:T,
+0052 NazUlohy:A,8;NazSouboru:A,8;Ar:N,2;Cesta:A,79;Navesti:A,11
+0053 #L Typ in [' ','I','F','M','R','P','E','U','H','D','L']
+0054 #L (trailchar(' ',Navesti)<>''<=>upcase(copy(Cesta,1,2))in['A:','B:'
+0055 ])|trailchar(' ',Navesti) in ['#','##','#R','#r','#SQL']:'N vˆ¨t¡ p©i A:,B:
+0056 A:A,35;T:T
+0057 chyb¡ soubor FANDHLP.000
+0058 nen¡ procedura MAIN
+0059 opravit A/N?
+0060 n zev nesm¡ obsahovat mezeru
+0061 !!! Vypo‡¡tan˜ text !!!
+0062 FM0062/nastav tisk rnu!
+0063 !!! included text !!!
+...
+0070 Trial verze 4.2
+0071 Trial (uk zkov ) verze PC FANDu pro s¡Ÿov˜ provoz £loh !!!
+...
+     -----datov˜ editor ------------------
+0100 FM0100/zapnout-vypnout/Podmno‘inu/Duplikaci/Tabel tor/Aditivn¡ zmˆny/Kontroly/Varov n¡
+0101 FM0101/zapnout-vypnout/Podmno‘inu/Duplikaci/Tabel tor/Varov n¡
+0102 FM0102/zapnout-vypnout/Podmno‘inu/Duplikaci/Tabel tor/Aditivn¡ zmˆny/Varov n¡
+0103 FM0103/zapnout-vypnout/Podmno‘inu/Duplikaci/Tabel tor/Kontroly/Varov n¡
+0104 FM0104/zapnout-vypnout/Tabel tor/Kontroly/Varov n¡
+0105 FM0105//Opis/Kontroly/Nov  podmno‘ina/Graf/T©¡dit
+0106 FM0106//Opis/Kontroly/Nov  podmno‘ina/Graf
+0107 vybran  podmno‘ina soub. $ je pr zdn 
+0108 obnovit star˜ obsah A/N?
+0109 zru¨it vˆtu A/N?
+0110 $
+0111 soubor nem  vlastn¡ kl¡‡
+0112 byla zru¨ena posledn¡ vˆta, kon‡¡m
+0113 vyber podmno‘inu vˆt:
+0114 vypo‡¡tej:
+0115 soubor $ je pr zdn˜
+0116 (ESC) vymazat celou podmno‘inu vˆt A/N?
+0117 © dek:/n zev:
+0118 vˆta neexistuje
+0119 v souboru $ nen¡ vˆta pro kumulaci
+0120 odsud a‘ ke konci nejsou chyby
+0121 p©epsat £daj A/N?
+0122 ‡¡slo vˆty:
+0123               F2-edit  F4-duplik  F5-p©ep¡n  F7-soub  F9-ulo‘
+0124  F2-po© F3-hled F4-dupl F5-p©ep F6-akce F7-soub F9-ulo‘   Ctrl F1 PgUp PgDn  
+0125  Ctrl:    F3-vˆta  F5-v˜po‡et  F8-diagnostika  F9-proveƒ  F10-zav©¡t
+0126                       F6-tisk  F9-ulo‘                   Ctrl F1 PgUp PgDn  
+0127  Ctrl:    F3-vˆta   F4-p©evz¡t   F5-v˜po‡et   F7-pod©¡z.soub.
+0128   F3-hled  F4-dupl  F5-p©ep  F6-akce  F7-soub  F9-ulo‘   Ctrl F1 PgUp PgDn  
+0129            F4-dupl  F5-p©ep  F7-soub  F9-ulo‘             Ctrl F1 PgUp PgDn  
+0130               F5-p©ep  F7-soub  F9-ulo‘        Ctrl F1 PgUp PgDn
+0131  Ctrl:    F5-v˜po‡et   F8-diagnostika   F9-proveden¡   F1 Home End
+0132 vytvo©it vˆtu v souboru $ A/N?
+0133 chcete £lohu zaheslovat A/N?
+0134                    F2-vybrat    F3-zru¨it   F9-po©ad¡                 
+0135           F2-vzestupnˆ    F3-zru¨it    F9-po©ad¡   >-sestupnˆ          
+0136 synt.dob©e  pamˆŸ: nad $, soub. $, kapit. $, volno $
+0137 opustit editor A/N?
+0138 n zev mus¡ b˜t identifik tor
+0139 nesoulad v star‚/nov‚ dekl.(nap©. typ B,T v .DTA, typ N v .DBF)
+0140 nelze p©evz¡t (odli¨n˜ typ, vypo‡.£daj nebo z kaz zmˆn)
+0141                            F9-ulo‘                      Ctrl F1 PgUp PgDn  
+0142     F1-help index    F10-p©edchoz¡ help    F6-tisk     Ctrl   PgUp PgDn
+0143  Ctrl:     F3-© dek     F5-v˜po‡et      F6-tisk z aktu ln¡ pozice
+0144                            Ù-p©evz¡t kl¡‡                          PgUp PgDn
+0145  Ctrl:                                                Home End
+0146 heslo '$' chyb¡ v souboru $
+0147 (ESC) vytvo©it kopii zdroj. programu A/N?
+0148 vˆta byla zru¨ena, nelze ji zmˆnit (CtrlF2 refresh)
+0149 vˆta byla zmˆnˆna jin˜m programem, za‡neme znovu
+0150 vˆta byla zmˆnˆna a ji‘ nepat©¡ k podmno‘inˆ (CtrlF2 refresh)
+0151  Ctrl:                           F5-v˜po‡et
+0152                                 Ù-vyber                                  
+0153 n zev helpu:
+0154  Ctrl:          F4-p©evz¡t   F5-v˜po‡et   F7-pod©¡z.soub.
+0155 souhrnn˜ kl¡‡ p©¡li¨ dlouh˜, nebude t©¡dˆn¡
+0156 nen¡ ani jeden £daj k zobrazen¡
+0157 ulo‘it zmˆnˆn˜ text do clipboardu A/N?
+0158 Nedokon‡en  vˆta bude zru¨ena! P©esto opustit A/N?
+0159              >>   sestava  je  pr zdn    <<
+
+  ------------ graph ----------------------------------
+
+0201 Chyba $ p©i inicializaci grafick‚ho re‘imu
+0202 Soubor $ nenalezen
+0203 Chyba zobrazen¡ PCX ($)
+0204 Chyb¡ £daj $
+0205 Pro kruhov˜, nebo poschoƒov˜ graf nen¡ povolena z porn  hodnota
+0206 Chybn˜ typ £daje $
+...
+0208 Chybn˜ parametr $ v parameru $=
+...
+0210 Nen¡ zad n vstupn¡ soubor
+0211 Soubor $ nen¡ deklarov n
+0212 —daj $ nen¡ v souboru deklarov n
+0213 Chyba z pisu do PCX ($)
+0214 Z pis do souboru PCX  A/N?
+...
+0220 FM0220/GRAPH/Vstupy/Barvy,typ,v˜pl¤/P©ep¡na‡e/Nastav.tisku/Soubor param./Ozna‡en¡ os/Texty,okna/Zobrazen¡
+0221 FM0221//Sloupcov˜/Kruhov˜/€ rov˜/Polynom.regrese/Srov.sloupcov˜/Srov.‡ rov˜/Poschoƒov˜/3D sloupcov˜/3D ‡ rov˜
+0229 FM0229//Soubor a £daje/V˜bˆr vˆt/Rozsahy hodnot
+0230 FM0230//—daje/V˜bˆr vˆt/Rozsahy hodnot
+0231 FM0231//Typ grafu/V˜pl¤/Tvar/›¡©ka/Stupe¤ polynomu/Zmˆna po©ad¡ barev/Definice barev
+0233 FM0233//Obrys/Barevnˆ/Vzorek/Barva+vzorek/Jednobarevnˆ
+0235 FM0235//1. (v lec,p s)/2. (jehlan,plocha)/3. (kv dr,kulisa)
+0237 FM0237//10 %/20 %/30 %/40 %/50 %/60 %/70 %/80 %/90 %/100 %
+0240 Stupe¤ polynomu:
+0241 FM0241//Hlavi‡ka/X osa/Y osa/Z osa/Smˆr popisu osy X
+0242 V˜pis hodnot - po‡et des.m¡st
+0243 Hlavi‡ka:
+0244 N zev pro osu X:
+0245 N zev pro osu Y:
+0246 N zev pro osu Z:
+0247 FM0247//0  —daj Z0/1. —daj/2. —daj/3. —daj/4. —daj/5. —daj/6. —daj/7. —daj/8. —daj/9. —daj
+0249 N zev £daje Z
+0250 Opravdu ukon‡it Graph (A/N)?
+0251 Chyba p©i ‡ten¡ ze souboru parametr– $
+0252 Komunikace
+0253 —daje souboru
+0254 Po‡ te‡n¡ vˆta
+0255 Max 25000 vˆt
+0256 Po‡et vˆt
+0257 Maximum na ose Y
+0258 Minimum na ose Y
+0259 Minimum nesm¡ b˜t vˆt¨¡ ne‘ maximum
+0260 FM0260//Rastr/Export do gr.soub./Graf do okna
+0262 FM0262//Horizont lnˆ/Vertik lnˆ/Uvnit© grafu
+0264 FM0264//Zapnut˜/Vypnut˜/Hodnoty v grafu/Form t hodnoty
+0266 Soubory
+0268 FM0268/Vstup do menu/Zapnuto/Vypnuto
+0270 FM0270/R me‡ek/Zapnuto/Vypnuto
+0272 FM0272//Zapnuto  +/Vypnuto
+0273 FM0272//Zapnuto /Vypnuto +
+0274 Soubor existuje - p©epsat (A/N) ?
+0275 FM0275//Kvalita/Smˆr/Hustota/Posun horiz./Posun vertik./Odstr nkovat/Prodleva
+0276 Tisk grafu p©es tiskov˜ mana‘er (timeout=253) nen¡ podporov n.
+....
+0280 FM0280//Horizont lnˆ/Vertik lnˆ
+0282 FM0282//1 60 dpi/2 120 dpi/3 240 dpi
+0283 FM0283//Zapnuto/Vypnuto
+0284 FM0284/(cm)/0/1/2/3/4/5/6/7/8/9
+0286 FM0286/(© dky)/0/1/2/3/4/5/6/7/8/9
+0287 FM0287//Bˆ‘n  D (draft)/St©edn¡ M (NLQ)/Vysok  H
+0289 FM0289//Zapnuto/Vypnuto
+0290 FM0290//N zev/€ten¡/Z pis/PCX-zobrazen¡
+0292 Soubor parametr– existuje - p©epsat (A/N) ?
+0293 Chyba p©i z pisu do souboru parametr–
+0294 Nelze zadat dal¨¡ textov‚ okno, p©ekro‡en max. po‡et oken
+0295 Chyba p©i z pisu do souboru $
+0296 FM0296//Text/Okno
+0297 Okno
+...
+0299 Pozad¡
+0300 Osy
+0301 Parametry
+0302 Vstupy
+0303 Typ
+0304 Soubor
+0305 Barva
+0306 Smˆr
+0307 Rastr
+0308 ›¡©ka
+0309 Tisk
+0310 R me‡ek
+0312 Barvy
+0313 Soubor pro parametry
+0314 Za‡ tek textu  X:     Y:        Velikost p¡sma:      Barva:
+0315 Okno: -za‡ tek X:   Y:    -konec X:   Y:    Barva: -pozad¡:    -pisma:
+0316 Editace textu
+0317 Posun © dku
+0318 ›ipka nahoru
+0319 ›ipka dol–
+0320 Vstup do © dku
+0321 Ukon‡en¡
+0322 Texty a okna
+0323 P©edchoz¡
+0324 N sleduj¡c¡
+0325 Editace
+0326 P©id n¡ nov‚ho
+0327 Zru¨en¡
+0328 FM0328//Tmav‚/Svˆtl‚/M¡ch n¡ @
+0329 L ‡ern /B modr /G zelen /C purpurov /R ‡erven /M fialov /O hnˆd /A ¨ed 
+0330 FM0330/Definice barev/L ‡ern /B modr /G zelen /C purpurov /R ‡erven /M fialov /O hnˆd /A ¨ed 
+0331 FM0331/Definice barev/a ¨ed /b modr /g zelen /c purpurov /r ‡erven /m fialov /y ‘lut /w b¡l 
+0332 a ¨ed /b modr /g zelen /c purpurov /r ‡erven /m fialov /y ‘luta/w b¡l 
+0333 (-1 ... implicitn¡ nastaven¡ barvy)
+0334 Tmav‚
+0335 Svˆtl‚
+
+     -----  textovy editor -------------
+
+0400 ‡ten¡ ze souboru
+0401 z pis do souboru
+0402 p©¡li¨ dlouh˜ © dek, rozdˆlit (A/N)?
+...
+0404 text p©¡li¨ dlouh˜, nesta‡¡ pamˆŸ
+0405 hledat:
+0406 podm¡nky:
+0407 nahradit:
+0408 (ESC) nahradit A/N?
+0409 prav˜ okraj:
+0410 lev˜ okraj:
+0411   Vkl
+0412  P©ep
+0413   Ods
+0414  Form
+0415   Zar
+0416           Prohl¡‘en¡
+0417   Slp
+0418 blok je p©ili¨ dlouh˜ (mus¡ b˜t <= 28kB)
+0419 p©¡li¨ dlouh˜ v˜raz, nevejde se na © dek
+0420 ‡¡slo © dku:
+
+    ------- runtime errors   ------
+...
+0601 (DML) soubor $ neexistuje
+0602 (DML) v souboru $ neexistuje £daj $
+0603 (DML) neex. spojen¡ souboru $ a $
+0604 (DML) nesta‡¡ pamˆt
+0605 program $ neexistuje
+0606 program $ skon‡il chybou
+0607 soubor $ nen¡ set©¡dˆn
+0608 (DML) soubor $ nem  kl¡‡ resp. nem  alias '$'
+0609 link($[recno],$)  ‡¡slo vˆty neexistuje
+0610 pro program $ nesta‡¡ pamˆt
+0611 edit(..owner=..)  ‡¡slo vˆty neexistuje
+0612 (DML) chyb¡ _reset/_rewrite pro soubor $
+0613 writerec($,key) kl¡‡ neexistuje
+0614 (DML) ‡ten¡ za koncem souboru $
+0615 (DML) nepovolen˜ seek v souboru $
+0616 soubor $ je zaheslov n
+0617 ‡¡slo -$ a‘ $
+0618 datum/‡as form tu '$'
+0619 (DML) chybn  verze FANDDML
+0620 £lohu $ nelze vytvo©it (limit v Config.Sys?)
+0621 adres © $ nelze zru¨it
+0622 chyba je v £loze $
+0623 kapitoly 'D','U' nemaj¡ n zev a kap. 'U' mus¡ b˜t prvn¡ v hlavn¡ £loze
+0624 nesta‡¡ pamˆŸ
+0625 p©ete‡en¡ z sobn¡ku (p©¡li¨ hlubok  rekurze, zjednodu¨te v˜razy)
+0626 FAND intern¡ chyba $
+0627 $[recno].$:=   argument indexu a vˆta nen¡ zru¨ena
+0628 zadejte heslo
+0629 £loha V m nen¡ p©¡stupna
+0630 £loha $ nen¡ odladˆna
+0631 £loha $ neexistuje
+0632 v £loze $ nen¡ procedura $
+0633 (DML) nepovolen˜ deleterec pro  $
+0634 (DML) nepovolen˜ recallrec pro  $
+0635 (DML) kl¡‡ nem  tolik argument– nebo nesouhlas typu
+0636 menu/menubar se nevejde na obrazovku
+0637 ke kontrole znovu
+0638 heslo nesouhlas¡, za‡neme znovu
+0639 o‡ek v m ‡¡slo v pohybliv‚ ‡ rce
+0640 $[recno].$  ‡¡slo vˆty neexistuje
+0641 readrec/writerec($,n) ‡¡slo vˆty neexistuje
+0642 isdeleted($,recno) ‡¡slo vˆty neexistuje
+0643 podpora pro grafick˜ re‘im jen 80 x 25 a nen¡ pro CGA
+0644 adres © $ nelze vytvo©it
+0645 $ forall bez ! mˆn¡ indexy
+0646 $ nelze volat jako program
+0647 nep©elo‘en‚ kapitoly v uloze (zaheslovan‚ resp. RdOnly)
+0648 chyba p©i ‡ten¡ FAND.OVR
+0649 kapitola dvakr t deklarovan 
+0650 forall aktualizuje soubor $.SQL bez kl¡‡e
+0651 (DML) pro soubor $.SQL nelze pou‘¡t _file
+0652 soubor $.SQL bez kl¡‡e nelze editovat
+0653 form t £daje: '$'
+0654 verze FANDu nepodporuje soubory .SQL
+0655 nelze p©e‡¡st ani n vˆ¨t¡; chcete disketu form tovat (A/N) ?
+0656 chyba na jednotce $:
+0657 na disketˆ je  $  vadn˜ch sektor–
+0658 form tovac¡ modul nezn  tento typ jednotky
+0659 tato verze FANDu nedovoluje kapitoly L
+0660 $  copyfile do sebe
+0661 kapitola $ je po zahrnut¡ {$$include ..} del¨¡ ne‘ 65000 B
+0662 z pis nelze zru¨it dokud existuj¡ jin‚, kter‚ na nˆho odkazuj¡
+0663 edit(..sel=..) t©¡den¡ index– nesouhlas¡
+0664 p©elo‘en  kapitola F (mimo #U,#L,#I,#D) je del¨¡ ne‘ 65000 B
+
+   ---------- chybov‚ zpr vy MS-DOS ----------
+0701 $ nesta‡¡ m¡sto na disku
+0702 soubor $ nenalezen
+0703 cesta $ nenalezena
+0704 $ zvˆt¨it FILES v CONFIG.SYS (LAN:server,shell.cfg,net.cfg)
+0705 p©¡stup k souboru $ blokov n (RdOnly|LAN chybi #)
+0706 fatal error: incorrect handle
+0707 fatal error: memory cb destroyed
+0708 DOS: nesta‡¡ pamˆt
+0709 fatal error: invalid memory cb address
+0712 invalid access code
+0713 invalid data
+0715 invalid drive
+0721 diskov  jednotka pro soubor $ mimo provoz
+0719 chyba na diskov‚ jednotce pro soubor $
+0731 chyba hardware
+0779 $ nelze zru¨it atribut ReadOnly
+0780 $ ji‘ existuje, p©epsat A/N?
+0799 do‡asn˜ interni soubor
+
+0800 $ chyba p©i ‡ten¡ disku
+0801 $ nesta‡¡ m¡sto na disku
+....
+0807 disketa nem  n vˆ¨t¡, p©epsat (zru¨¡ soubory na disketˆ!!) A/N?
+0808 (ESC) vlo‘te do $: disketu  $
+0809 disketa nem  n vˆ¨t¡
+0810 disketa je ne‡iteln 
+0811 chyba p©i ‡ten¡ adres ©e pro $
+0812 Do $: nelze vlo‘it '$' (aktivn¡ soubory na '$')
+0813 z $: nelze vyndat disketu (je na n¡ aktivn¡ RDB)
+0814 zru¨it soubor $ A/N?
+0815 zru¨en v katalogu, zru¨it i fyzicky A/N?
+0816 disketa m  n vˆ¨t¡ $, p©epsat (zru¨¡ soubory na diskete!!) A/N?
+0817 disketa m  n vˆ¨t¡ $
+0818 vyndejte disketu $ z jednotky $:
+0819 pro $ chyb¡ indexov˜ soubor
+0820 duplicitn¡ kl¡‡   $
+0821 $.nrecs:= pro indexov.soubor
+0822 duplicitn¡ kl¡‡ v souboru $
+0823 vˆta neodpov¡d  vybran‚ mno‘inˆ
+0824 soubor je s¡Ÿov˜ !!!! p©esto zmˆnit A/N?
+0825 soubor $ je blokov n($), zkou¨¡m d le
+0826 vˆta je blokov na, zkou¨¡m d le
+0827 soubor $ nelze zru¨it
+0828 zru¨¡m vˆty s duplicitn¡m kl¡‡em v souboru $
+0829 soub. $ nelze p©ejmenovat na $
+0830 indexy $ nekonzistentn¡ (vytvo©¡m je znovu)
+0831 indexy $ nekonzistentn¡  831
+0832 $ zru¨it vˆty s dupl. kl¡‡em A/N?
+0833 indexy $ nekonzistentn¡  833
+0834 indexy $ nekonzistentn¡  834
+0835 indexy $ nekonzistentn¡  835
+0836 soubor je s¡Ÿov˜ !!!! p©esto zru¨it A/N?
+0837 indexy $ nekonzistentn¡  837
+0838 chyba p©i nahr n¡ font–
+0839 vˆta $ souboru $ je blokov na, zkou¨¡m d le
+0840 pokus o otev©en¡ adres ©e '$' m¡sto souboru
+...
+0842 soubor $ je sd¡len a nen¡ LAN-verze FANDu
+...
+0850 $: disketa chr nˆna proti z pisu
+0852 $  Drive not ready
+0854 $  CRC error in data
+0855 $  Bad drive request structure length
+0856 $  Disk seek error
+0857 $  Unknown media type
+0858 $  Sector not found
+0860 $  chyba za©¡zen¡ p©i z pisu
+0861 $  chyba za©¡zen¡ p©i ‡ten¡
+0862 $  Hardware failure
+0863 $  sharing violation
+...   867  unknown LAN[tastic] (?) error
+0876 (LAN) $ nesta‡¡ m¡sto na disku
+
+0881 n zev £lohy mus¡ b˜t identifik tor
+0882 $ p©¡li¨ kr tk˜; oprava hlavi‡ky A/N?
+0883 $ nesouhlas¡ s deklarac¡
+0884 demonstra‡n¡ verze FANDu podporuje max. 30 DOS-soubor– a 100 vˆt
+0885 upravit hlavi‡ku souboru dle deklarace (risk!) A/N?
+0886 po‡et vˆt z¡sk m z d‚lky souboru (na konci mo‘n  nesmysln‚ vˆty!)
+0887 chyba $ (p©ete‡en¡ max. po‡tu stran v indexu)
+0888 chyba $ (©etˆz stran; autom.oprava)
+0889 chyba $ (pozice/d‚lka textu; autom.oprava)
+0890 chyba $ (©etˆz dlouh.textu; dopln¡m mezery)
+0891 chyba $ (pozice/d‚lka textu; nahrad¡m pr zdn˜m)
+...
+0893 $ nekonzistentn¡ hlavi‡ka (autom.oprava)
+
+0901 chyba FANDu (SetExit)
+0902 chyba FANDu (OsShell-MemFun)
+0903 chyba FANDu (XFNotValid)
+0904 backupm: chyba p©i ‡ten¡ adres ©e pro $
+...
+
+
+     ----- chybov‚ zpr vy  kompilace--------------
+
+1001 o‡ek v m
+1002 dlouh˜ n zev
+1003 dlouh˜ £daj
+1004 ‡¡slo
+1005 n zev
+1006 dlouh  konstanta
+1007 chybn  konstanta nebo synt.chyba
+1008 nedeklarovan˜ n zev £daje
+1009 nedekl. resp. neviditeln˜ n zev souboru/role
+1010 nedovolen˜ typ
+1011 chyb¡ '}' nebo {$$endif}
+1012 neslu‡iteln˜ typ
+1013 text v apostrofech
+1014 o‡ek v m ulo‘en˜ £daj
+1015 o‡ek v m znak v apostrofech
+1016 o‡ek v m textovou konstantu
+1017 chyb¡ ukon‡uj¡c¡ apostrof
+1018 o‡ek v m logick˜ typ
+1019 o‡ek v m textov˜ typ
+1020 o‡ek v m ‡¡seln˜ typ
+1021 o‡ek v m ‡¡slo 0 .. 10
+1022 chyb¡ merg-£daje u prvn¡ho souboru
+1024 soubor nem  kl¡‡e
+1025 kapitola F origin lu nebyla p©elo‘ena resp. s odli¨nou verz¡
+1026 dvakr t deklarov no
+1027 o‡ek v m £daj t‚ho‘ souboru
+1028 nedovolen˜ sum
+1029 o‡ek v m n zev
+1030 neslu‡iteln˜ po‡et £daj–
+1031 nelze p©ipojit a sou‡asnˆ p©epsat
+1032 p©i aktualizaci "na m¡stˆ" nelze p©ipojit
+1033 o‡ek v m kl¡‡ov‚ slovo '$'
+1034 o‡ek v m instrukce
+1035 typ B,T neexistuje pro .DTA
+1036 typ F m  pro .DTA max. 11 ‡¡slic
+1037 kapitola neexistuje
+...
+1039 o‡ek v m 'boolean','real' nebo 'string'
+1040 o‡ek v m konec
+1041 lok. promˆnn‚ a spec. funkce nelze pou‘¡t pod sum nebo s Ii
+1042 o‡ek v m 'true' resp. 'false'
+1043 nedekl. resp. nezobrazen˜ £daj
+1044 nep©¡pustn˜ parametr
+1045 o‡ek v m cond=,mode=,ctrl=,sum=,assign=,times=,head=,width=,sort=
+1046 £daj nen¡ ©¡d¡c¡
+1047 o‡ek v m n zev souboru
+...
+1049 o‡ek v m 'onlysum' resp. 'errcheck'
+1050 o‡ek v m 'compressed' nebo 'normal'
+1051 parametry cond=,sort=,ctrl=,sum= nelze pou‘¡t bez ud n¡ souboru
+1052 o‡ek v m head=Glob ln¡Promˆnn TypuT, nocancel nebo append
+1053 o‡ek v m /FIX /VAR nebo /TXT
+1054 o‡ek v m .line:= nebo .page:=
+1056 o‡ek v m .pagesize,.pagelimit
+1057 o‡ek v m #RH,#RF,#PH,#PF,#CH,#CF,#DH,#DE
+1059 £daje pro sum nejsou ze stejn‚ £rovnˆ
+1060 autosort (!) a chyb¡ seznam £daj–
+1061 ¨patn‚ ‡¡slov n¡
+1062 ‡¡slo neexistuje u vstupu
+1063 o‡ek v m glob ln¡ promˆnnou, soubor.nrecs|size, soubor.lastupdate
+1064 o‡ek v m glob ln¡ promˆnnou nebo soubor.nrecs
+1065 prompt nedovoluje typ T
+1066 synt.chyba - o‡ek v m { #C | #K }  #A  #U  #D  #L  #I
+1067 nep©¡pustn˜ n zev souboru
+1068 duplicitn¡ n zev souboru
+1069 pro ‡as pi¨te ____:__ nebo ____:__:__ nebo ____:__:__.__
+1070 o‡ek v m ‡¡seln˜ nebo textov˜ typ
+1071 pro datum pi¨te __.__.__  nebo __.__.____
+1072 p©i _dummy lze mˆnit jen lok. resp. glob ln¡ promˆnn‚
+1073 v opakovan‚ skupinˆ £daj– mus¡ masky v˜stupu souhlasit
+1074 sum uvnit© sum nen¡ povoleno
+1075 n zev funkce neexistuje
+1076 chyb¡ # seznam £daj–  a rozvrh vˆty
+1077 duplicitn¡ po©adov‚ ‡¡slo
+...
+1079 o‡ek v m $ podtr‘¡tek pro £daj $
+1080 @ v masce jen u ‡¡seln‚ho nebo textov‚ho typu
+1081 strana formul ©e bez £daj–
+1082 chyb¡ #I_soubor
+1083 u souboru .RDB se nesm¡ uv‚st defin. text
+1084 £daj typu T nelze pou‘¡t pro t©¡dˆn¡ ani v kl¡‡i
+1085 p©i _dummy nelze pou‘¡t O.N zev—daje
+1086 v souboru .DBF neexistuj¡ ulo‘en‚ £daje typu N, R
+1087 £daj $ nen¡ v souboru $ deklarov n
+1088 v katalogu nen¡ z pis < ARCHIVES, tento n zev >
+1089 o‡ek v m #Ii_N zevSouboru
+1090 o‡ek v m #Oi_N zevSouboru , #O_N zevSouboru resp. #O*_N zevSouboru
+1091 join #O*_N zevSouboru nelze kombinovat s #Oi_N zevSouboru
+1092 o‡ek v m !! ^y ?y ?e ^n F1 F2 F3 01 #A #L <= ?? r2 24 co wx s7 li -> ^m
+...
+1094 lexik ln¡ srovn n¡ jen pro textov˜ typ
+1095 o‡ek v m konec masky
+1096 soubor $ nen¡ v katalogu
+1097 soubor nesm¡ b˜t datov˜
+1098 v katalogu je jen 1 z pis
+1099 O.N zev—daje zde nen¡ dovoleno
+1100 o‡ek v m  NoExcl,NoDel,NoCr,Rd,Wr,Cr,Del,Excl
+1101 o‡ek v m nocancel,freemem,loadfont,textmode
+1102 nevejde se na obrazovku
+1103 journal nesm¡ m¡t p©¡ponu .X, .DBF, .RDB ...
+1104 soubor by mˆl b˜t typu .X (jako origin l)
+1105 dlouh˜ kl¡‡ (max. 123 byte)
+1106 like/journalof neslu‡iteln˜ s .RDB, .DBF, .DTA, CATALOG, [origin l]
+1107 v souboru .X chyb¡ vlastn¡ kl¡‡
+1108 soubor nem  indexy
+1109 o‡ek v m @ nebo n zev alternativn¡ho kl¡‡e
+1110 nezn m˜ identifik tor
+...
+1113 kr tk˜ —daj
+1114 u‘iv. pohled neexist.
+1115 o‡ek v m ‡¡slo >=1
+1116 spojen¡ mezi soubory nen¡ vhodn‚ pro vazbu typu owner
+1117 v˜sledn  mno‘ina £daj– je pr zdn 
+1118 "key in" jen pro soubor .X a ‡ten¡ dle indexu (a bez owner=)
+1119 p©i vol n¡ procedury nesouhlas¡ po‡et resp. typ parametr–
+1120 o‡ek v m ^a,^b,^d,^e,^q,^s,^w
+1121 nep©¡pustn‚ pro aktivn¡ RDB
+1122 o‡ek v m lok ln¡ promˆnnou
+1123 >30 argument–
+1124 o‡ek v m 1 p¡smeno
+1125 nep©¡pustn˜ parametr p©¡kazu edit
+1126 souhrnn  d‚lka £daj– > 255 byt–
+1127 nelze pou‘¡t pro .RDB
+1128 o‡ek v m soubor se 2 £daji (typ A a T)
+1129 o‡ek v m povolen˜ n zev kl vesy (viz dokumentace)
+1130 o‡ek v m assign= nebo edit
+1131 o‡ek v m window, shared, locked nebo graphics
+1132 £loha nem  soubor .HLP
+1133 o‡ek v m ‡¡slo 0..255 nebo interval
+...
+1135 £daj na lev‚ stran‚ v #A nesm¡ b˜t argumentem kl¡‡e
+1136 o‡ek v m 0,1,2,3 (prac.dny,soboty,nedˆle,sv tky)
+1137 o‡ek vam 'boolean','real','string' nebo 'record|index of N zevSouboru'
+...
+1139 nep©¡pustn˜ typ p©evodu (kombinace form tu pro copyfile)
+1140 lok ln¡ promˆnn‚ typu index nebo file zde nelze pou‘¡t
+1141 o‡ek v m record-promˆnnou
+1142 o‡ek v m 'KL','LK','KN','LN','LW','KW' nebo 'WL'
+1143 lok ln¡ promˆnn‚ typu record,index,file nelze pou‘¡t ve v˜razu
+1144 s podm¡nkou record resp. pro record-promˆnnou nelze vyvolat report
+1145 chyb¡ deklarace sestavy
+1146 o‡ek v m lok ln¡ promˆnnou typu real
+1147 o‡ek v m lok ln¡ nebo glob ln¡ promˆnnou
+1148 soubor m  kl¡‡ s vypo‡¡tan˜mi argumenty (! nen¡ povoleno)
+1149 record-promˆnn  pat©¡ k jin‚mu souboru
+...
+1152 ciz¡ kl¡‡ ($) s "!" se nehod¡ pro owner resp. m  vypo‡. £daje
+1153 vazba s "!" vy‘aduje jednozna‡n˜ vlastn¡ kl¡‡ v nad©azen‚m souboru
+1154 soubory nejsou spojen‚ ciz¡m kl¡‡em
+1155 nen¡ povoleno pro soubory .SQL
+1156 soubory .SQL nelze pou‘¡t sou‡asnˆ na vstupu a v˜stupu
+1157 o‡ek v m head=,foot=,mode=,delim=
+1158 o‡ek v m {$$ifdef X} {$$ifndef X} {$$else} {$$endif} {$$define X..} {$$copy Name}
+1159 kontrolujte vno©en¡ kompil torov˜ch direktiv
+1160 o‡ek v m  overwr=, indent=, wrap=, align=, left=, right=
+1161 o‡ek v m  ww=(.),txtpos=,exit=(.),head=,last=,ctrl=,alt=,shift=,noedit
+1162 typ file jen v procedur ch
+1163 n zev parametru typu file mus¡ b˜t souborem
+1164 lok ln¡ promˆnn  typu index pat©¡ k jin‚mu souboru
+1165 o‡ek v m lok ln¡ promˆnnou typu index
+1167 o‡ek v m cond=,sort=
+1168 var-parametr mus¡ b˜t typu boolean,string,real
+1169 checkfile nepodporuje .DBF,.DTA
+1170 o‡ek v m soubor typu .SQL a £daj typu T
+1171 syntaktick  chyba v masce
+1172 merge souboru do sebe nelze pou‘¡vat pro soubory .SQL
+1173 p©i©azen¡ parametrick‚mu souboru, kter˜ je v˜st. soubor pro merge
+1174 funkce nedovoluje var-parametr
+1175 parametr sort= lze pou‘¡t jen, kdy‘ nen¡ v deklaraci indexu
+1176 lze pou‘¡t jen, kdy‘ v deklaraci pracovn¡ho indexu je i t©¡dˆn¡
+1177 o‡ek v m lok ln¡ promˆnnou typu record nebo index
+1178 t©¡den¡ index– nesouhlas¡
+1179 owner= nelze kombinovat s v˜bˆrem (key in ..) ani ('SQL-text')
+1180 p©i countowned() lze pou‘¡t jedinˆ vazbu k dal¨¡ record-promˆnn‚
+1181 owner=index a t©¡dˆn¡ neodpov¡d  vazbˆ
+1182 spojen¡ neexistuje nebo nen¡ typu owner
+1183 o‡ek v m '0'
+1184 v sel= nelze pou‘¡t tent˜‘ index jako v Soubor/Index
+1185 o‡ek v m .X nebo .DBF
+
+      -----------  PROLOG COMPILER MESSAGES  --------------
+....
+1503 chyb¡ '}'
+1504 chyb¡ hexadecim ln¡ ‡¡slice
+1505 opakovanˆ deklarov no
+1506 o‡ek v m ":-"
+1507 promˆnn  m  typ $ a o‡ek v m typ $
+1508 zde "_" nen¡ p©¡pustn‚
+1509 promˆnn‚ zat¡m nebyla p©i©azena hodnota
+1510 nesoulad typu
+1511 o‡ek v m promˆnnou
+1512 n zev nen¡ v r mci typu deklarov n
+1513 o‡ek v m n zev predik tu
+1514 n zev typu mus¡ za‡¡t velk˜m p¡smenem
+1515 n zev funkce nebo konstanty mus¡ za‡¡t mal˜m p¡smenem
+1516 pro typ "$" chyb¡ deklarace
+1517 o‡ek v m n zev typu
+1518 n zev predik tu mus¡ za‡¡t mal˜m p¡smem
+1519 v¡ce ne‘ 15 argument–
+1520 promenn‚ "$" nebyla p©i©azena hodnota
+1521 hodnota promˆnn‚ "$" nen¡ pou‘ita
+1522 chyb¡ definice predik tu "$"
+1523 o‡ek v m nep©i©azenou promˆnnou
+1524 o‡ek v m =,<,>,<=,>=,<>
+1525 o‡ek v m ‡¡slo
+1526 o‡ek v m datab zov˜ predik t
+1527 p©¡li¨ dlouh˜ datab zov˜ predik t
+1528 pro proceduru FANDu nedovolen˜ typ
+1529 pro predik t nelze definovat clause
+1530 int_real(..) vy‘aduje (io) nebo (oi)
+1531 o‡ek v m n zev datab ze
+1532 datab ze $ zab¡r  v¡ce ne‘ 65000 B
+1533 chyba consult($) .. nesoulad definice a ulo‘en˜ch dat
+1534 concat(..) vy‘aduje (iio),(ooi),(ioi),(oii) nebo (iii)
+...
+1537 o‡ek v m £daj typu T
+1538 <,>,<=,>=  jen pro typ Integer nebo Real
+1539 neexist. soubor v p©elo‘en‚ kapitole L
+1540 nelze pou‘¡vat v˜raz s nep©i©azenou promˆnnou
+1541 datab zov˜ predik t (mimo soubory FANDu) nedovoluje typ LongStr
+...
+1543 typ LongStr pou‘it v termu database
+1544 p©elo‘en˜ program L je vˆt¨¡ ne‘ 65000 B
+1545 lproc($, $...) a predik t neexistuje resp. m  argumenty
+1546 nepovolen˜ predik t pod not(..)
+1547 u v˜stupn¡ch parametr– pod not (..) jedinˆ _
+1548 L_N zev nen¡ seznamov˜ typ
+1549 deklarace konstanty nedovoluje operace
+1550 s t¡mto predik tem nelze pou‘¡t autorekurze
+1551 druh˜ !-parameter mus¡ m¡t stejn˜ domain a b˜t definov n jako v˜stupn¡
+1552 1.parameter mus¡ b˜t vstupn¡
+1553 o‡ek v m p rov˜ v˜skyt ka‘d‚ promˆnn‚ (vstup+v˜stup)
+1554 program $ neexistuje
+1555 fandfield(..) a fandlink(..) vy‘aduj¡ (iooo..) nebo (iioo..)
+1556 autorekurze pro skal rn¡ typ (Integer,String... ) nen¡ definov na
+1557 v˜stupn¡ parametr a nen¡ skal rn¡ ani seznamov˜ typ
+1558 o‡ek v m promˆnnou typu String (prvn¡ pr¡p. Integer)
+1559 nen¡ povoleno pro predik t s v˜stupn¡mi parametry
+1560 o‡ek v m znak v apostrofech
+1561 o‡ek v m nep©i©azenou v˜stupn¡ promˆnnou typu L_xxx
+1562 jen pro predik t (i....io)
+
+     ---------  SQL SERVER messages  ----------------------------------
+
+2000 chyba p©i SQL server login: nen¡ zaveden s¡Ÿov˜ ovlada‡
+2001 chyba p©i SQL server login: nelze otev©¡t s¡Ÿov˜ port resp. socket
+2002 chyba p©i SQL server login: FAND server se nehl s¡ resp. hl s¡ chybnˆ
+2003 chyba p©i SQL server login: p©ekro‡en max. po‡et klient–
+2004 SQL server spojen¡: chyb¡ odezva po (opakovan‚m) vys¡l n¡ bloku
+2005 SQL server spojen¡: chyba p©i vys¡l n¡ bloku
+2006 chyba p©i p©ijmu bloku
+2007 SQL server spojen¡: timeout waiting for next request block
+2008 vadn˜ blok potvrzen¡
+2009 vadn˜ request block
+2010 SQL server spojen¡: incorrect message length
+2011 SQL server spojen¡: p©ekro‡en maxim ln¡ po‡et stream–
+2012 vadn˜/misplaced blok dat
+2013 ‡¡slo streamu neexistuje
+2014 inkonzistentn¡ blok
+2015 SQL server spojen¡: timeout receiving data
+2016 P©ekro‡en¡ mo‘nost¡ demoverze komunika‡n¡ho serveru
+....
+2020 syntaktick  chyba v p©¡kazu SQL
+
+     --------------------  PROLOG  nadstavba  --------------------------
+
+3000 $
+3001 o‡ek v m '$'
+3002 o‡ek v m identifik tor
+3003 nezn m‚ slovo
+3004 o‡ek v m n zev souboru
+3005 o‡ek v m n zev £daje ze souboru $
+3006 o‡ek v m n zev role (ciz¡ho kl¡‡e) souboru $
+3007 syntaktick˜ rozbor nedovede spojit £seky ( zde oddˆlen‚ '|')
+3008 nep©¡pustn˜ znak '$'
+3009 chyba syntaxe
+3010 o‡ek v m #A,#G,#O nebo #R
+...
+3012 pro '$' nezn m '$'
