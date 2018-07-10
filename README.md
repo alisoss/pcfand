@@ -18,10 +18,13 @@ Poslední verzí vývojového prostředí PC FAND, která byla distribuovaná ko
 
 PC FAND byl vyvíjen a překládán do binárního tvaru pomocí vývojového prostředí Borland Pascal 7.
 
+## Úpravy knihoven
+
+Z důvodu úpravy práce s HEAPem (shora a zezdola stack, uprostřed heap), využití paměti grafické karty a realizace konstruktu "long jump" podle vzoru z jazyka C++ byly upraveny některé runtime knihovny Borland Pascalu. Z tohoto důvodu je sice možné zdrojáky PC FANDu přeložit, ale výsledná aplikace nepůjde spustit.
+
 ## Poznámky
 
 * V adresáři `/PAS/Mb160` je nezveřejněná úprava, která zvyšuje limit fyzické velikosti sdíleného datového souboru `.000` nad 160 MB.
-* V základní verzi PC FANDu bylo dělení nulou upraveno tak, aby se v takovém případě vrátila nula. Tento workaround byl realizován úpravou jedné knihovny TPL, kterou z licenčních důvodů nelze zveřejnit. Ve verzi pro coprocessor tento workaround nebyl, dělení nulou končilo standardní chybou.
 
 ## Licence
 
