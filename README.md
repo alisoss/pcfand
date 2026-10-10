@@ -14,6 +14,14 @@ Poslední verzí vývojového prostředí PC FAND, která byla distribuovaná ko
 * HELP - nápověda pro programátorský i uživatelský runtime
 * PAS - zdroje PC FANDu
 
+## Nápověda
+
+Nápověda programátorské verze PC FANDu 4.2 (`help/FANDHLP`) je převedená
+pro čtení v [docs/help](docs/help/README.md).
+Nápověda uživatelské verze (`help/UFANDHLP`) je v
+[docs/help-user](docs/help-user/README.md), anglická (`help/angl/UFANDHLP`)
+v [docs/help-user-en](docs/help-user-en/README.md).
+
 ## Překlad
 
 PC FAND byl vyvíjen a překládán do binárního tvaru pomocí vývojového prostředí Borland Pascal 7.
