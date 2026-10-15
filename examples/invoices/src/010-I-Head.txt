@@ -1,0 +1,6 @@
+{ the page heading of every report, put in with an include directive }
+#RH PARAM.Company, today;
+______________________________                               __.__.____
+
+#PH page;
+                                                                page ___

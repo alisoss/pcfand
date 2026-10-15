@@ -1,0 +1,3 @@
+{ customers, indexed by code and, for searching, by name }
+Code:A,6; Name:A,30; City:A,20; Phone:A,15;
+#K @ Code; ByName(@) * ~Name;

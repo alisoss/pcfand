@@ -1,0 +1,15 @@
+{ all invoices, by customer, with totals }
+#I_INVOICE ! Cust;No
+{$include Head}
+#CH_Cust Cust, CUSTOMER.Name;
+
+______ ______________________________
+#DE No, Issued, Due, Total, cond(Paid:'paid', Overdue:'late', else:''),
+    DaysLate(cond(Paid:today, else:Due));
+   _______   __.__.____   __.__.____   _______.__   ____ ____
+#CF_Cust sum(Total);
+                                                   ----------
+                                                   _______.__
+#RF sum(Total), WithVat(sum(Total));
+                                         total     _______.__
+                                      with VAT     _______.__

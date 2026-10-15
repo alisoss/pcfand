@@ -1,0 +1,3 @@
+{ the settings: one record, its fields are global variables (PARAM.VatRate) }
+Company:A,30; VatRate:F,2.0; NextNo:F,6.0;
+#K @@;

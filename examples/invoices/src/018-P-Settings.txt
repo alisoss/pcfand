@@ -1,0 +1,5 @@
+{ the settings; only a user with access right 2 may change them }
+begin
+  if trust(2) then edit(PARAM,())
+  else message('Only the administrator may change the settings.');
+end;

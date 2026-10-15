@@ -1,3 +1,349 @@
+                       {  XMS + CACHE + MEMORY  }
+{$ifdef FPC}
+const
+  ArenaSize = 256 * 1024 * 1024;
+var
+  Arena1Buf: PByte;
+  Arena1Pos: PtrUInt;
+  Arena1End: PtrUInt;
+  Arena2Buf: PByte;
+  Arena2Pos: PtrUInt;
+  Arena2Start: PtrUInt;
+function Normalize(L:longint):pointer; begin Normalize := pointer(PtrUInt(L)) end;
+function AbsAdr(P:pointer):longint; begin AbsAdr := longint(PtrUInt(P)) end;
+procedure CloseXMS;
+begin end;
+procedure MoveToXMS(NPage:word; var Src);
+begin end;
+procedure MoveFromXMS(NPage:word; var Dest);
+begin end;
+procedure SetMyHeapEnd;
+begin end;
+function CacheExist:boolean;
+begin CacheExist := NCachePages > 0 end;
+procedure NewCachePage(var ZLast:CachePagePtr; Z:CachePagePtr);
+begin Z^.Handle:=$FF; Z^.Upd:=false; Z^.Chain:=nil; inc(NCachePages);
+      ZLast^.Chain:=Z; ZLast:=Z end;
+procedure FormatCache;
+var ZLast: CachePagePtr; i: integer; p: CachePagePtr;
+begin
+  NCachePages := 0;
+  ZLast := CachePagePtr(@CacheRoot);
+  Stack2Ptr := nil;
+  CacheEnd := nil;
+  for i := 1 to 64 do begin
+    GetMem(p, SizeOf(CachePage));
+    p^.Handle := $FF; p^.Upd := false; p^.Chain := nil;
+    inc(NCachePages);
+    ZLast^.Chain := p; ZLast := p;
+  end;
+end;
+procedure ResetCachePages;
+var Z: CachePagePtr;
+begin
+  Z := CacheRoot;
+  while Z <> nil do begin Z^.Handle := $FF; Z^.Upd := false; Z := Z^.Chain end;
+end;
+function WrCPage(Handle:word;N:longint;var Buf;ErrH:word):boolean;
+var err:word;
+begin
+  SeekH(Handle,N shl CachePageShft); WriteH(Handle,CachePageSize,Buf);
+  WrCPage:=true;
+  if (HandleError<>0) and (ErrH<>Handle) then begin
+    err:=HandleError; SaveCache(Handle);
+    SetCPathForH(Handle); SetMsgPar(CPath); WrLLF10Msg(700+err);
+    WrCPage:=false end;
+end;
+function WriteCachePage(Z:CachePagePtr;ErrH:word):boolean;
+begin WriteCachePage:=WrCPage(Z^.Handle,Z^.HPage and $FFFFFF,Z^.Arr,ErrH) end;
+procedure ReadCachePage(Z:CachePagePtr);
+var err,h,n:word;
+begin
+  h:=Z^.Handle; SeekH(h,(Z^.HPage and $FFFFFF) shl CachePageShft);
+  n:=ReadH(h,CachePageSize,Z^.Arr);
+  if HandleError<>0 then begin
+    err:=HandleError; SetCPathForH(h); SetMsgPar(CPath);
+    RunError(700+err) end;
+end;
+function Cache(Handle:byte;Page:longint):CachePagePtr;
+var Found: boolean; Y, Z: CachePagePtr;
+    HPage: longint;
+begin
+  HPage := Page or (longint(Handle) shl 24);
+  Found := false;
+  Y := CachePagePtr(@CacheRoot);
+  Z := CacheRoot;
+  while Z <> nil do begin
+    if Z^.HPage = HPage then begin
+      Found := true;
+      break;
+    end;
+    if Z^.Chain = nil then break;
+    Y := Z;
+    Z := Z^.Chain;
+  end;
+  if (Z <> nil) and (Z <> CacheRoot) then begin
+    Y^.Chain := Z^.Chain;
+    Z^.Chain := CacheRoot;
+    CacheRoot := Z;
+  end;
+  if not Found then begin
+    if Z^.Upd and (Z^.Handle <> $FF) then begin
+      Z^.Upd := false;
+      if IsHandle(Z^.Handle) then
+        if not WriteCachePage(Z, 0) then GoExit;
+    end;
+    Z^.HPage := HPage;
+    ReadCachePage(Z);
+  end;
+  Cache := Z;
+end;
+procedure LockCache;
+begin end;
+procedure UnLockCache;
+begin end;
+function SaveCache(ErrH:word):boolean;
+var Z:CachePagePtr;
+begin
+  Z:=CacheRoot; SaveCache:=true;
+  while Z<>nil do begin
+    if Z^.Upd and (Z^.Handle<>$FF) and ((ErrH=0) or (Z^.Handle=ErrH))
+    {$ifdef FPC} and IsHandle(Z^.Handle) {$endif}
+    and not WriteCachePage(Z,ErrH) then SaveCache:=false;
+    Z^.Upd:=false; Z:=Z^.Chain end;
+end;
+procedure ClearCacheH(h:word);
+var Z:CachePagePtr;
+begin
+  if h=$FF then exit; Z:=CacheRoot;
+  while Z<>nil do begin
+    if Z^.Handle=h then begin Z^.Upd:=false; Z^.Handle:=$FF end;
+    Z:=Z^.Chain end;
+end;
+procedure SubstHandle(h1,h2:word);
+var Z:CachePagePtr;
+begin
+  Z:=CacheRoot;
+  while Z<>nil do begin
+    if Z^.Handle=h1 then Z^.Handle:=h2; Z:=Z^.Chain end;
+end;
+procedure FreeCachePage(Z:CachePagePtr);
+var Z1,Z2:CachePagePtr;
+begin
+  if NCachePages<=1 then RunError(624); dec(NCachePages);
+  Z1:=CachePagePtr(@CacheRoot); Z2:=CacheRoot;
+  while Z2<>nil do begin
+    if Z2=Z then begin
+      Z1^.Chain:=Z2^.Chain;
+      if Z2^.Upd then begin
+        if not WriteCachePage(Z2,0) then GoExit end;
+      exit end;
+    Z1:=Z2; Z2:=Z2^.Chain end;
+end;
+procedure ExpandCacheUp;
+begin end;
+procedure ExpandCacheDown;
+begin end;
+function HeapErrFun(Size:word):integer; begin HeapErrFun := 0 end;
+function GetStore(Size:StoreSize):pointer;
+var p: pointer;
+begin
+  if (Arena1Pos < PtrUInt(Arena1Buf)) or (Arena1Pos + Size > Arena1End) then RunError(624);
+  p := pointer(Arena1Pos);
+  inc(Arena1Pos, Size);
+  GetStore := p;
+end;
+function GetZStore(Size:StoreSize):pointer;
+var p: pointer;
+begin p := GetStore(Size); FillChar(p^, Size, 0); GetZStore := p end;
+procedure AlignParagraph; begin Arena1Pos := (Arena1Pos + 15) and not PtrUInt(15) end;
+function GetStore2(Size:StoreSize):pointer;
+begin
+  dec(Arena2Pos, Size);
+  if (Arena2Pos < Arena2Start) or (Arena2Pos > Arena2Start+ArenaSize) then RunError(624);
+  GetStore2 := pointer(Arena2Pos);
+end;
+function GetZStore2(Size:StoreSize):pointer;
+var p: pointer;
+begin p := GetStore2(Size); FillChar(p^, Size, 0); GetZStore2 := p end;
+function StoreStr(S:string):StringPtr;
+var p: StringPtr;
+    len: byte;
+begin
+  len := Length(S);
+  p := GetStore(len + 1);
+  Move(S, p^, len + 1);
+  StoreStr := p;
+end;
+procedure MarkStore(var p:pointer);
+begin p := pointer(Arena1Pos) end;
+procedure MarkStore2(var p:pointer);
+begin p := pointer(Arena2Pos) end;
+procedure MarkBoth(var p,p2:pointer);
+begin p := pointer(Arena1Pos); p2 := pointer(Arena2Pos) end;
+function InArena1(p:pointer):boolean;
+begin InArena1 := (PtrUInt(p)>=PtrUInt(Arena1Buf)) and (PtrUInt(p)<=Arena1End) end;
+function InArena2(p:pointer):boolean;
+begin InArena2 := (PtrUInt(p)>=Arena2Start) and (PtrUInt(p)<=Arena2Start+ArenaSize) end;
+procedure ReleaseStore(p:pointer); begin if not InArena1(p) then exit; Arena1Pos := PtrUInt(p) end;
+procedure ReleaseAfterLongStr(p:pointer);
+var lsp: LongStrPtr;
+begin
+  if not InArena1(p) then exit;
+  lsp := LongStrPtr(p);
+  Arena1Pos := PtrUInt(p) + lsp^.LL + 2;
+  if Arena1Pos > Arena1End then Arena1Pos := Arena1End;
+end;
+procedure ReleaseStore2(p:pointer); begin if not InArena2(p) then exit; Arena2Pos := PtrUInt(p) end;
+procedure ReleaseBoth(p,p2:pointer);
+begin ReleaseStore(p); ReleaseStore2(p2) end;
+function StoreAvail:longint;
+var avail: PtrUInt;
+begin
+  if Arena1End > Arena1Pos then avail := Arena1End - Arena1Pos else avail := 0;
+  if avail > PtrUInt(MaxLongint) then avail := PtrUInt(MaxLongint);
+  StoreAvail := longint(avail);
+end;
+procedure AlignLongStr; begin Arena1Pos := (Arena1Pos + 15) and not PtrUInt(15) end;
+procedure AlignSegment(Skip:word);
+begin Arena1Pos := ((Arena1Pos + Skip + $FFFF) and not PtrUInt($FFFF)) - Skip end;
+function HeapTop:pointer;
+begin HeapTop := pointer(Arena1Pos) end;
+                         {  EXIT  }
+procedure NewExit(POvr:PProcedure; var Buf:ExitRecord);
+begin
+  Move(ExitBuf, Buf, sizeof(ExitRecord));
+  ExitBuf.OvrEx := POvr;
+  ExitBuf.ExP := ExitP;
+  ExitBuf.BrkP := BreakP;
+  ExitBuf.mBP := MyBP;
+  GoExitFired := false;
+end;
+procedure GoExit;
+var i:integer; allZero:boolean; bp:PByte;
+begin
+  ExitP := ExitBuf.ExP;
+  BreakP := ExitBuf.BrkP;
+  MyBP := ExitBuf.mBP;
+  GoExitFired := true;
+  allZero:=true; bp:=@ExitBuf.JmpBuf;
+  for i:=0 to sizeof(ExitBuf.JmpBuf)-1 do
+    if bp[i]<>0 then begin allZero:=false; break end;
+  if allZero then halt(2);
+  LongJmp(ExitBuf.JmpBuf, 1);
+end;
+procedure RestoreExit(var Buf:ExitRecord);
+begin Move(Buf, ExitBuf, sizeof(ExitRecord)) end;
+procedure KeepInMemory(const P:array of pointer);
+begin end;
+procedure InitMemoryArenas;
+begin
+  GetMem(Arena1Buf, ArenaSize);
+  Arena1Pos := PtrUInt(Arena1Buf);
+  Arena1End := Arena1Pos + ArenaSize;
+  GetMem(Arena2Buf, ArenaSize);
+  Arena2Start := PtrUInt(Arena2Buf);
+  Arena2Pos := Arena2Start + ArenaSize;
+end;
+function FandShellRun(const cmd:ansistring):integer;
+begin
+{$ifdef UNIX}
+  FandShellRun := (fpSystem(cmd) shr 8) and 255;
+{$else}
+  FandShellRun := SysUtils.ExecuteProcess('cmd.exe','/c '+cmd);
+{$endif}
+end;
+function DosPathMap(const P:ansistring):ansistring;
+begin DosPathMap := UnixPath(P) end;
+{ BP7 tried the name, then .EXE and .COM: in the current directory, then
+  on the PATH }
+function FindProg(const Path:ansistring):ansistring;
+const Ext:array[0..2] of string[4]=('','.EXE','.COM');
+var p,q:ansistring; i,k:integer;
+begin
+  p := Path;
+{$ifdef UNIX}
+  for i := 1 to length(p) do if p[i] = '\' then p[i] := '/';
+  k := 0;
+{$else}
+  k := 2;
+{$endif}
+  for i := 0 to k do begin
+    q := p + Ext[i];
+    if FileExists(q) then begin FindProg := q; exit end;
+    if pos(DirectorySeparator,q) = 0 then begin
+      q := FileSearch(q, GetEnv('PATH'));
+      if q <> '' then begin FindProg := q; exit end end end;
+  FindProg := '';
+end;
+function OSshell(Path:PathStr;CmdLine:String127;
+   NoCancel,FreeMm,LdFont,TextMd:boolean):boolean;
+var
+  shellCmd, dosLine, prog: ansistring;
+  dosRc: integer; dir0: string;
+  rc: longint;                { a wait status: 16 bits cut exit codes > 127 }
+  i, ErrNr: integer;
+begin
+  ErrNr := 0; LastExitCode := 0;
+  if Path = '' then
+    shellCmd := CmdLine
+  else
+    shellCmd := Path + ' ' + CmdLine;
+  while (length(shellCmd) > 0) and (shellCmd[1] = ' ') do
+    delete(shellCmd, 1, 1);
+{$ifdef UNIX}
+  for i := 1 to length(shellCmd) do
+    if shellCmd[i] = '\' then shellCmd[i] := '/';
+{$endif}
+  dosLine := shellCmd;
+  SaveCache(0);
+  CallCloseFandFiles(false);
+  FandDosShell := TShellRun(@FandShellRun);
+  FandDosPathMap := TPathMap(@DosPathMap);
+  GetDir(0,dir0);                      { a CD in the command lasts until its end }
+  if shellCmd = '' then begin          { exec('','') - BP7's COMSPEC: a shell }
+    RdMsg(003); TtyForChild(MsgLine);
+{$ifdef UNIX}
+    prog := GetEnv('SHELL'); if prog = '' then prog := '/bin/sh';
+    rc := fpSystem(prog);
+{$else}
+    rc := SysUtils.ExecuteProcess(GetEnv('COMSPEC'), '') shl 8;
+{$endif}
+    TtyForFand end
+  else if FandDosCmd(dosLine,dosRc) then rc := dosRc shl 8
+  else begin
+    { a named program that is not there: BP7's 605, whatever nocancel says }
+    if Path <> '' then begin
+      prog := FindProg(Path);
+      if prog = '' then ErrNr := 605
+{$ifdef UNIX}
+      { DOS looked in the current directory first, sh does not }
+      else if (pos('/',Path) = 0) and FileExists(prog) and (FileSearch(Path,GetEnv('PATH')) = '') then
+        shellCmd := './' + shellCmd
+{$endif}
+      end;
+    if ErrNr = 0 then begin
+      TtyForChild('');
+{$ifdef UNIX}
+      rc := fpSystem(shellCmd);
+{$else}
+      rc := SysUtils.ExecuteProcess('cmd.exe', '/c ' + shellCmd) shl 8;
+{$endif}
+      TtyForFand end end;
+  if ErrNr = 0 then
+    if rc < 0 then ErrNr := 605
+    else begin
+      LastExitCode := (rc shr 8) and 255;
+      { a named program's error ends the procedure unless nocancel (BP7) }
+      if (Path <> '') and not NoCancel and (LastExitCode <> 0) then ErrNr := 606 end;
+  {$I-} ChDir(dir0); {$I+} if IOResult <> 0 then ;
+  ResetCachePages;
+  CallOpenFandFiles(false);
+  if ErrNr = 605 then LastExitCode := 127;            { as sh says it }
+  if (ErrNr <> 0) and not OSShellQuiet then begin SetMsgPar(Path); WrLLF10Msg(ErrNr) end;
+  OSShell := ErrNr = 0;
+end;
+{$else}
                         {  XMS + CACHE + MEMORY  }
 
 function Normalize(L:longint):pointer; assembler;
@@ -316,6 +662,10 @@ var n:integer;
 begin
   n:=14-PtrRec(HeapPtr).Ofs; if n<0 then inc(n,16); GetStore(n);
 end;
+procedure AlignSegment(Skip:word);
+begin end;
+function HeapTop:pointer;
+begin HeapTop := HeapPtr end;
 
 
                          {  EXIT  }
@@ -469,4 +819,4 @@ begin
   else if LdFont then LoadVideoFont;
   if ErrNr<>0 then begin SetMsgPar(ProgName); WrLLF10Msg(ErrNr) end;
   OSShell:=ErrNr=0;
-end;
+end;{$endif}

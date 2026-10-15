@@ -162,16 +162,46 @@ end;
 
 const FirstDate:float=6.97248E+5;
 
+{$ifdef FPC}
+function IsNullValue(p:pointer;l:word):boolean;
+var i:word;
+begin
+  IsNullValue:=true; if l=0 then exit;
+  for i:=0 to l-1 do
+    if PByteArray(p)^[i]<>$FF then begin IsNullValue:=false; exit end;
+end;
+function Real48ToFloat(p:pointer):float;
+var r:real48;
+begin Move(p^,r,6); Real48ToFloat:=Real2Double(r) end;
+procedure FloatToReal48(R:float;p:pointer);
+var q,m:int64; ex:longint; b:array[0..5] of byte;
+begin
+  q:=PInt64(@R)^; ex:=(q shr 52) and $7FF; m:=q and $000FFFFFFFFFFFFF;
+  if (ex=0) or (ex=$7FF) then begin FillChar(p^,6,0); exit end;
+  inc(m,int64(1) shl 12);
+  if (m and (int64(1) shl 52))<>0 then begin m:=0; inc(ex) end;
+  m:=(m shr 13) and $7FFFFFFFFF;
+  dec(ex,1023-129);
+  if ex<1 then begin FillChar(p^,6,0); exit end;
+  if ex>255 then ex:=255;
+  b[0]:=byte(ex);
+  b[1]:=byte(m); b[2]:=byte(m shr 8); b[3]:=byte(m shr 16);
+  b[4]:=byte(m shr 24); b[5]:=byte((m shr 32) and $7F);
+  if q<0 then b[5]:=b[5] or $80;
+  Move(b,p^,6);
+end;
+{$else}
 function IsNullValue(p:pointer;l:word):boolean; assembler;
 asm les di,P; mov cx,l; mov al,0ffH; cld;
     repe scasb; mov ax,0; jne @1; mov ax,1
 @1: end;
+{$endif}
 
 function _ShortS(F:FieldDPtr):string;
   var P:pointer; POfs:word absolute P;
       S:string;  ss:LongStrPtr; l:word;
   begin if F^.Flg and f_Stored<>0 then
-      begin l:=F^.L; S[0]:=char(l); P:=CRecPtr; inc(POfs,F^.Displ);
+      begin l:=F^.L; S[0]:=char(l); P:=CRecPtr; {$ifdef FPC}inc(P,F^.Displ){$else}inc(POfs,F^.Displ){$endif};
         case F^.Typ of
           'A','N':
               if F^.Typ='A' then begin
@@ -194,7 +224,7 @@ var P:pointer;POfs:word absolute P;
     S:LongStrPtr; Pos:longint; err:integer; md:LockMode; l:word;
 begin
   if F^.Flg and f_Stored<>0 then begin
-    P:=CRecPtr; inc(POfs,F^.Displ); l:=F^.L;
+    P:=CRecPtr; {$ifdef FPC}inc(P,F^.Displ){$else}inc(POfs,F^.Displ){$endif}; l:=F^.L;
     case F^.Typ of
      'A','N': begin S:=GetStore(l+2); S^.LL:=l;
         if F^.Typ='A' then begin
@@ -228,7 +258,7 @@ var p:pointer; r:float; O:word absolute p; IP:^integer absolute p;
 label 1;
 begin
   if F^.Flg and f_Stored<>0 then begin
-    p:=CRecPtr; inc(O,F^.Displ);
+    p:=CRecPtr; {$ifdef FPC}inc(p,F^.Displ){$else}inc(O,F^.Displ){$endif};
     if CFile^.Typ='D' then _R:=_RforD(F,p) else
     case F^.Typ of
      'F':begin r:=RealFromFix(p^,F^.NBytes);
@@ -237,7 +267,9 @@ begin
            if IP^=0 then _R:=0.0 else _R:=IP^+FirstDate
          else goto 1;
      'R':
-1:       if IsNullValue(p,F^.NBytes) then _R:=0. else _R:=RealPtr(p)^ end;
+1:       if IsNullValue(p,F^.NBytes) then _R:=0.
+         else {$ifdef FPC}if F^.NBytes=6 then _R:=Real48ToFloat(p) else{$endif}
+           _R:=RealPtr(p)^ end;
     end
   else _R:=RunReal(F^.Frml);
 end;
@@ -246,7 +278,7 @@ function _B(F:FieldDPtr):boolean;
 var p:pointer; O:word absolute p; CP:^char absolute p;
 begin
   if F^.Flg and f_Stored<>0 then begin
-    p:=CRecPtr;inc(O,F^.Displ);
+    p:=CRecPtr;{$ifdef FPC}inc(p,F^.Displ){$else}inc(O,F^.Displ){$endif};
     if CFile^.Typ='D' then _B:=CP^ in ['Y','y','T','t'] else
     if (CP^=#0) or (CP^=#$ff) then _B:=false else _B:=true end
   else _B:=RunBool(F^.Frml);
@@ -258,7 +290,7 @@ type
 var p:pointer; n:longint; err:integer;
   O:word absolute p; LP:^longint absolute p; P10:^A10 absolute p;
 begin
-  p:=CRecPtr; inc(O,F^.Displ);
+  p:=CRecPtr; {$ifdef FPC}inc(p,F^.Displ){$else}inc(O,F^.Displ){$endif};
   if CFile^.Typ='D' then begin n:=0; val(LeadChar(' ',P10^),n,err);_T:=n end
   else if IsNullValue(p,4) then _T:=0 else _T:=LP^;
 end;
@@ -270,7 +302,7 @@ var
 const LeftJust=1;
 begin
   if F^.Flg and f_Stored<>0 then begin
-    p:=CRecPtr; inc(O,F^.Displ); L:=F^.L; M:=F^.M;
+    p:=CRecPtr; {$ifdef FPC}inc(p,F^.Displ){$else}inc(O,F^.Displ){$endif}; L:=F^.L; M:=F^.M;
     case F^.Typ of
      'A':begin while length(S)<L do
            if M=LeftJust then S:=S+' ' else S:=' '+S; i:=1;
@@ -301,7 +333,7 @@ var p:pointer; s:string; m:word; l:longint;
     O:word absolute P; IP:^integer absolute P;
 begin
   if F^.Flg and f_Stored<>0 then begin
-    p:=CRecPtr; inc(O,F^.Displ); m:=F^.M;
+    p:=CRecPtr; {$ifdef FPC}inc(p,F^.Displ){$else}inc(O,F^.Displ){$endif}; m:=F^.M;
     case F^.Typ of
      'F':begin
          if CFile^.Typ='D' then begin
@@ -312,8 +344,10 @@ begin
      'D':case CFile^.Typ of
           '8':if trunc(R)=0 then IP^:=0 else IP^:=trunc(R-FirstDate);
           'D':begin s:=StrDate(R,'YYYYMMDD'); move(s[1],p^,8) end;
-         else RealPtr(p)^:=R end;
-     'R': RealPtr(p)^:=R;
+         else {$ifdef FPC}if F^.NBytes=6 then FloatToReal48(R,p) else{$endif}
+              RealPtr(p)^:=R end;
+     'R': {$ifdef FPC}if F^.NBytes=6 then FloatToReal48(R,p) else{$endif}
+          RealPtr(p)^:=R;
 end end end;
 
 procedure B_(F:FieldDPtr;B:boolean);
@@ -321,7 +355,7 @@ var p:pointer;
     O:word absolute p; BP:^boolean absolute p; CP:^char absolute p;
 begin
   if (F^.Typ='B') and (F^.Flg and f_Stored<>0) then begin
-    p:=CRecPtr; inc(O,F^.Displ);
+    p:=CRecPtr; {$ifdef FPC}inc(p,F^.Displ){$else}inc(O,F^.Displ){$endif};
     if CFile^.Typ='D' then if B then CP^:='T' else CP^:='F'
     else BP^:=B end;
 end;
@@ -331,7 +365,7 @@ var p:pointer; s:string;
     O:word absolute p; LP:^longint absolute p;
 begin
   if (F^.Typ='T') and (F^.Flg and f_Stored<>0) then begin
-    p:=CRecPtr; inc(O,F^.Displ);
+    p:=CRecPtr; {$ifdef FPC}inc(p,F^.Displ){$else}inc(O,F^.Displ){$endif};
     if CFile^.Typ='D' then
       if Pos=0 then FillChar(p^,10,' ')
       else begin str(Pos:10,s); move(s[1],p^,10) end
@@ -360,7 +394,12 @@ end;
 procedure DelDifTFld(Rec,CompRec:pointer;F:FieldDPtr);
 var n:longint; cr:pointer;
 begin
-  cr:=CRecPtr; CRecPtr:=CompRec; n:=_t(F); CRecPtr:=Rec;
+  cr:=CRecPtr;
+  {$ifdef FPC}
+  if CompRec=nil then begin
+    CRecPtr:=Rec; DelTFld(F); CRecPtr:=cr; exit end;
+  {$endif}
+  CRecPtr:=CompRec; n:=_t(F); CRecPtr:=Rec;
   if n<>_t(F) then DelTFld(F); CRecPtr:=cr;
 end;
 procedure ClearRecSpace(p:pointer);

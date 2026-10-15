@@ -1,0 +1,4 @@
+{ The users: name, code, password, access rights. The task asks for a
+  password when it starts; access right 2 may change the settings. }
+'Administrator',1,'admin',(1,2);
+'Clerk',2,'clerk',(1);

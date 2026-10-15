@@ -1,0 +1,10 @@
+{ the unpaid invoices, as the Prolog chapter Unpaid finds them }
+var k:string;
+begin
+  with window(0,0,64,12,='Unpaid invoices'!) do begin
+    lproc(Unpaid);
+    writeln('');
+    write('Press any key.');
+    k:=readkey
+  end
+end;

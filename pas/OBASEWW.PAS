@@ -35,9 +35,23 @@ procedure RunMsgN(N:longint);
 procedure RunMsgOff;
 procedure RunMsgClear;
 
+{$ifdef FPC}
+procedure BatchLine(const S:string);
+var BatchMsgCount:longint;
+{$endif}
 implementation
 
-uses graph,base,drivers,access,oaccess;
+uses {$ifdef FandGraph}graph,{$endif}base,drivers,access,oaccess{$ifdef FPC},fandcp{$endif};
+{$ifdef FPC}
+procedure BatchLine(const S:string);
+var t:ansistring; i:integer;
+begin
+  t:='';
+  for i:=1 to length(S) do if S[i]>=' ' then t:=t+S[i];
+  writeln(StdErr,'fand: ',S852ToUtf8(t));
+  inc(BatchMsgCount);
+end;
+{$endif}
 
 type
   WParamPtr=^WParam;
@@ -73,13 +87,16 @@ function PushScr(C1,R1,C2,R2:word):pointer;
 var p:pointer;
 begin
   dec(C1); dec(R1); p:=GetStore(4); PushScr:=p;
-  asm  les di,p; cld; mov ax,C1; stosw; mov ax,R1; stosw end;
+  {$ifdef FPC}WordPtr(p)^:=C1; WordPtr(PtrUInt(p)+2)^:=R1;{$else}
+  asm  les di,p; cld; mov ax,C1; stosw; mov ax,R1; stosw end;{$endif}
   ScrPush(C1,R1,C2-C1,R2-R1);
 end;
 
 function PushW1(C1,R1,C2,R2:word;PushPixel,WW:boolean):longint;
 var s:LongStrPtr; w:WParamPtr;
-    x1,y1,x2,y2,i,n,sz:word; pos:longint; buf:WGrBufPtr; vp:ViewPortType;
+    x1,y1,x2,y2,i,n,sz:word; pos:longint; buf:WGrBufPtr;
+    {$ifndef FPC}vp:ViewPortType;{$endif}
+    {$ifdef FPC}mark:pointer;{$endif}
 label 1;
 begin
   pos:=0;                            {$ifdef FandGraph}
@@ -100,7 +117,12 @@ begin
     ShowMaus end;                    {$endif}
   s:=GetStore(2); w:=PushWParam(C1,R1,C2,R2,WW); w^.GrRoot:=pos;
   PushScr(C1,R1,C2,R2);
-  s^.LL:=AbsAdr(HeapPtr)-AbsAdr(s)-2; PushW1:=StoreInTWork(s);
+  {$ifdef FPC}
+  MarkStore(mark); s^.LL := word(PtrUInt(mark)-PtrUInt(s)-2);
+  {$else}
+  s^.LL := AbsAdr(HeapPtr)-AbsAdr(s)-2;
+  {$endif}
+  PushW1:=StoreInTWork(s);
   ReleaseStore(s);
 end;
 
@@ -110,18 +132,23 @@ begin PushW:=PushW1(C1,R1,C2,R2,false,true) end;
 procedure PopScr(p:pointer);
 var C1,R1:word;
 begin
+  {$ifdef FPC}
+  C1:=WordPtr(p)^; R1:=WordPtr(pointer(PtrUInt(p)+2))^;
+  p:=pointer(PtrUInt(p)+4);
+  {$else}
 asm  push ds; lds si,p; cld; lodsw; mov C1,ax; lodsw; mov R1,ax;
      mov p.word,si; pop ds end;
+  {$endif}
   ScrPop(C1,R1,p);
 end;
 
 procedure PopW2(pos:longint;draw:boolean);
 var s:LongStrPtr; w:WParamPtr; wofs:word absolute w;
-    buf:WGrBufPtr; b:boolean; vp:ViewPortType;
+    buf:WGrBufPtr; b:boolean; {$ifndef FPC}vp:ViewPortType;{$endif}
 begin
   s:=ReadDelInTWork(pos);
   w:=WParamPtr(@s^.A); PopWParam(w); pos:=w^.GrRoot;
-  if draw then begin inc(wofs,sizeof(WParam)); b:=IsGraphMode;
+  if draw then begin {$ifdef FPC}inc(w){$else}inc(wofs,sizeof(WParam)){$endif}; b:=IsGraphMode;
     if pos<>0 then IsGraphMode:=false;{don't actually draw content of text buf}
     PopScr(w); IsGraphMode:=b end;
   ReleaseStore(s);                              {$ifdef FandGraph}
@@ -227,11 +254,15 @@ end;
 var Buf:array[1..MaxTxtCols] of word; col,row,len:word;
 label 1,2,3;
 begin
+  {$ifdef FPC}
+  if FandBatch then begin
+    BatchLine(MsgLine); KbdChar:=_F10_; F10SpecKey:=0; exit end;
+  {$endif}
   row:=TxtRows-1; ScrRdBuf(0,row,Buf,TxtCols);
   Beep; ScrClr(0,row,TxtCols,1,' ',colors.zNorm);
   if F10SpecKey=$ffff then
     ScrWrStr(0,row,'...!',colors.zNorm or $80)
-  else if spec.F10Enter then ScrWrStr(0,row,'Ù !',colors.zNorm or $80)
+  else if spec.F10Enter then ScrWrStr(0,row,#$11#$d9' !',colors.zNorm or $80)
   else ScrWrStr(0,row,'F10!',colors.zNorm or $80);
   col:=length(MsgLine)+5; len:=0;
   if (F10SpecKey=$fffe) or (F10SpecKey=_F1_) then begin
@@ -264,6 +295,10 @@ function PromptYN(NMsg:word):boolean;
 var w:longint; col,row:word; cc:char;
 label 1;
 begin
+  {$ifdef FPC}
+  if FandBatch then begin
+    RdMsg(NMsg); BatchLine(MsgLine+' -> '+AbbrNo); PromptYN:=false; exit end;
+  {$endif}
   w:=PushW(1,TxtRows,TxtCols,TxtRows); TextAttr:=colors.pTxt; ClrEol;
   RdMsg(NMsg); write(copy(MsgLine,maxi(length(MsgLine)-TxtCols+3,1),255));
   col:=whereX;row:=whereY; TextAttr:=colors.pNorm;

@@ -30,12 +30,19 @@ var PFldDs: PFldDPtr;
     Mode: AutoRprtMode;
     Txt: LongStrPtr;
 
+{$ifdef FPC}
+{ in place, as BP7's assembler version (which never copied S) }
+procedure SubstChar(var S:string;C1,C2:char);
+var i:integer;
+begin for i:=1 to length(S) do if S[i]=C1 then S[i]:=C2 end;
+{$else}
 procedure SubstChar(S:string;C1,C2:char); assembler;
 asm  les di,S; xor ch,ch; mov cl,es:[di]; jcxz @3; inc di;
      mov al,C1; mov ah,C2; cld;
 @1:  cmp al,es:[di]; jne @2; mov es:[di],ah;
 @2:  inc di; loop @1;
 @3:  end;
+{$endif}
 
 procedure Design(RO:RprtOptPtr);
 var

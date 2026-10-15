@@ -1,0 +1,10 @@
+{ invoices; the items are in ITEM, and ITEM keeps Total up to date }
+No:F,6.0; Issued:D,'DD.MM.YYYY'; Due:D,'DD.MM.YYYY'; Cust:A,6;
+Total:F,10.2; Paid:B; Note:T;
+#K @ No; CUSTOMER Cust;
+#C CustName:=CUSTOMER.Name : A,30;
+   Overdue:=^Paid & (Due<today) : B;
+#A PARAM.NextNo := cond(No>=PARAM.NextNo: No+1, else: PARAM.NextNo);
+#L Due>=Issued : 'the due date is before the issue date';
+   CUSTOMER.exist : 'no such customer';
+#I No:=PARAM.NextNo; Issued:=today; Due:=today+14;

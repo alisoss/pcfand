@@ -131,7 +131,7 @@ var s:LongStrPtr; w:WParamPtr; wofs:word absolute w;
 begin
   s:=ReadDelInTWork(pos);
   w:=WParamPtr(@s^.A); PopWParam(w); pos:=w^.GrRoot;
-  if draw then begin inc(wofs,sizeof(WParam)); b:=IsGraphMode;
+  if draw then begin {$ifdef FPC}inc(w){$else}inc(wofs,sizeof(WParam)){$endif}; b:=IsGraphMode;
     if pos<>0 then IsGraphMode:=false;{don't actually draw content of text buf}
     PopScr(w); IsGraphMode:=b end;
   ReleaseStore(s);                              {$ifdef FandGraph}

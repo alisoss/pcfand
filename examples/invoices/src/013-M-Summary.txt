@@ -1,0 +1,3 @@
+{ one SALES record per customer: number of invoices and their total }
+#I1_INVOICE ! Cust
+#O_SALES Cust:=Cust; Name:=CUSTOMER.Name; Invoices:=I1.count; Total:=sum(Total);

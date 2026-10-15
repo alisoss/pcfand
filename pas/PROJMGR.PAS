@@ -17,8 +17,14 @@ begin
   if CFile^.CatIRec<>0 then begin
     CPath:=RdCatField(CFile^.CatIRec,CatPathName);
     if CPath[2]<>':' then begin
-      d:=rb^.RdbDir; if CPath[1]='\' then CPath:=copy(d,1,2)+CPath else begin
+      d:=rb^.RdbDir;
+      {$ifdef FPC}
+      if CPath[1]=DirectorySeparator then begin end else begin
         AddBackSlash(d); CPath:=d+CPath end end;
+      {$else}
+      if CPath[1]='\' then CPath:=copy(d,1,2)+CPath else begin
+        AddBackSlash(d); CPath:=d+CPath end end;
+      {$endif}
     FSplit(CPath,CDir,CName,CExt); DelBackSlash(CDir) end
   else if rb=nil then CDir:=TopRdbDir else begin
     CDir:=rb^.RdbDir; AddBackSlash(CDir); CDir:=CDir+CFile^.Name end;
@@ -26,7 +32,7 @@ begin
     RdbDir:=CDir; if TopDataDir='' then DataDir:=CDir else
     if rb=nil then DataDir:=TopDataDir else begin
       d:=rb^.DataDir; AddBackSlash(d); DataDir:=d+CFile^.Name end end;
-  CDir:=CDir+'\';
+  CDir:=CDir+{$ifdef FPC}DirectorySeparator{$else}'\'{$endif};
 end;
 procedure ResetRdOnly;
 begin
@@ -61,7 +67,8 @@ begin
 2:if IsTestRun or not create then um:=Exclusive else um:=RdOnly;
   if OpenF(um) then begin
     if ChptTF^.CompileAll then ResetRdOnly
-    else if not top and (ChptTF^.TimeStmp<oldChptTF^.TimeStmp) then begin
+    else if not top and ({$ifdef FPC}Real48ToFloat(@ChptTF^.TimeStmp)<Real48ToFloat(@oldChptTF^.TimeStmp)
+                         {$else}ChptTF^.TimeStmp<oldChptTF^.TimeStmp{$endif}) then begin
       ResetRdOnly; SetCompileAll end;
     goto 3 end;
   if not create or (top and not IsTestRun) then RunError(631);
@@ -98,6 +105,7 @@ procedure ClearXFUpdLock; far;
 
 function CompRunChptRec(CC:word):boolean;
 procedure Diagnostics(MaxHp:pointer;Free:longint;FD:FileDPtr);
+{$ifdef FPC}begin end;{$else}
 var p:pointer; s1,s2,s3,s4:string8; r:RdbDPtr;
 begin
   r:=CRdb; while r^.ChainBack<>nil do r:=r^.ChainBack;
@@ -108,6 +116,7 @@ begin
   else str(AbsAdr(MaxHp)-AbsAdr(HeapPtr),s3);  { bytes of this chapter }
   str(Free,s4); Set4MsgPar(s1,s2,s3,s4);WrLLF10Msg(136);
 end;
+{$endif}
 function FindFD:FileDPtr;
 var FD:FileDPtr; FName:string12; d:DirStr; name:NameStr; ext:ExtStr;
 label 1;
@@ -122,7 +131,10 @@ var STyp:string[1]; p,p2,MaxHp:pointer; er:ExitRecord; OldE:EditDPtr;
     FD,lstFD:FileDPtr; oldLd,ld:LinkDPtr; EO:EditOptPtr; nStrm:word;
 label 1,2;
 begin
-  OldE:=E; MarkBoth(p,p2); WrEStatus; NewExit(Ovr,er); goto 2;
+  OldE:=E; MarkBoth(p,p2); WrEStatus; {$ifdef FPC}Move(ExitBuf,er,sizeof(ExitRecord)); ExitBuf.OvrEx:=Ovr;
+    ExitBuf.ExP:=ExitP; ExitBuf.BrkP:=BreakP; ExitBuf.mBP:=MyBP; if SetJmp(ExitBuf.JmpBuf)<>0 then begin
+    GoExitFired:=true; goto 2 end else GoExitFired:=false; KeepInMemory([@p,@p2,@MaxHp,@OldE,@Free,@WasError,@WasGraph,
+    @uw,@mv,@FD,@lstFD,@oldLd,@ld,@EO,@nStrm]);{$else}NewExit(Ovr,er); goto 2;{$endif}
   IsCompileErr:=false; uw:=false; mv:=MausVisible;
   lstFD:=LastInChain(FileDRoot); oldLd:=LinkDRoot;
   WasError:=true; WasGraph:=IsGraphMode;
@@ -152,7 +164,7 @@ begin
  {$endif}
   end;
   WasError:=false;
-2:MaxHp:=HeapPtr; ReleaseStore2(p2); Free:=StoreAvail; RestoreExit(er);
+2:MaxHp:={$ifdef FPC}nil{$else}HeapPtr{$endif}; ReleaseStore2(p2); Free:=StoreAvail; RestoreExit(er);
   RunMsgClear; if WasError then begin     {$ifdef FandSQL}
     ShutDownStreams(nStrm); {$endif}
     TextAttr:=colors.uNorm;
@@ -260,7 +272,9 @@ function MergAndReplace(FDOld,FDNew:FileDPtr):boolean;
 var s:string; er:ExitRecord; p:PathStr;
 label 1,2;
 begin
-  NewExit(Ovr,er);goto 1; s:='#I1_'+FDOld^.Name+' #O1_@'; SetInpStr(s);
+  {$ifdef FPC}Move(ExitBuf,er,sizeof(ExitRecord)); ExitBuf.OvrEx:=Ovr; ExitBuf.ExP:=ExitP; ExitBuf.BrkP:=BreakP;
+    ExitBuf.mBP:=MyBP; if SetJmp(ExitBuf.JmpBuf)<>0 then begin GoExitFired:=true; goto 1 end else GoExitFired:=false;
+    KeepInMemory([@s,@p]);{$else}NewExit(Ovr,er); goto 1;{$endif} s:='#I1_'+FDOld^.Name+' #O1_@'; SetInpStr(s);
   SpecFDNameAllowed:=true; ReadMerge; SpecFDNameAllowed:=false;
   RunMerge; SaveFiles; RestoreExit(er);
   CFile:=FDOld; DeleteF; CFile:=FDNew; CloseFile; FDOld^.Typ:=FDNew^.Typ;
@@ -312,7 +326,11 @@ var I,J,OldTxt,Txt,OldCRec:longint; STyp:string[1]; Typ:char;
     RprtTxt:LongStrPtr; top:boolean; lstFD:FileDPtr;
 label 1,2;
 begin
-  OldE:=E; MarkBoth(p,p2); p1:=p; NewExit(Ovr,er);goto 1;
+  OldE:=E; MarkBoth(p,p2); p1:=p; {$ifdef FPC}Move(ExitBuf,er,sizeof(ExitRecord)); ExitBuf.OvrEx:=Ovr;
+    ExitBuf.ExP:=ExitP; ExitBuf.BrkP:=BreakP; ExitBuf.mBP:=MyBP; if SetJmp(ExitBuf.JmpBuf)<>0 then begin
+    GoExitFired:=true; goto 1 end else GoExitFired:=false; KeepInMemory([@Buf,@w,@I,@J,@OldTxt,@Txt,@OldCRec,@STyp,@Typ,
+    @Name,@dir,@nm,@ext,@Verif,@FDCompiled,@Encryp,@Mode,@RP,@p,@p1,@p2,@OldE,@lmsg,@ld,@RprtTxt,@top,
+    @lstFD]);{$else}NewExit(Ovr,er); goto 1;{$endif}
   IsCompileErr:=false; FDCompiled:=false; OldCRec:=CRec;RP.R:=CRdb;
   top:=CRdb^.ChainBack=nil;
   if top then begin
@@ -349,14 +367,25 @@ begin
             if Verif or ChptTF^.CompileAll or (OldTxt=0) then begin
 2:            p1:=RdF(Name); WrFDSegment(I);
               if CFile^.IsHlpFile then CRdb^.HelpFD:=CFile;
-              if OldTxt>0 then
-                MergeOldNew(Verif,OldTxt); ReleaseStore(p1);
+              if (OldTxt>0) {$ifdef FPC}and IsTestRun{$endif} then
+                MergeOldNew(Verif,OldTxt);
+              {$ifdef FPC}
+              if PtrUInt(p1) > 65536 then
+              {$endif}
+                ReleaseStore(p1);
               CFile:=Chpt;
+              {$ifdef FPC}
+              if IsOldDcl(OldTxt) and (OldTxt<>_t(ChptOldTxt)) then ChptTF^.Delete(OldTxt);
+              {$else}
               if ChptTF^.LicenseNr=0 then ChptTF^.Delete(OldTxt)
               else if OldTxt<>0 then ChptTF^.Delete(OldTxt-ChptTF^.LicenseNr);
+              {$endif}
               end
             else if not RdFDSegment(I,OldTxt) then begin
-              LinkDRoot:=ld; ReleaseStore(p1); CFile:=Chpt; goto 2 end
+              LinkDRoot:=ld;
+              {$ifdef FPC}if PtrUInt(p1) > 65536 then{$endif}
+                ReleaseStore(p1);
+              CFile:=Chpt; goto 2 end
             else begin
               ChainLast(FileDRoot,CFile); MarkStore(p1);
               if CFile^.IsHlpFile then CRdb^.HelpFD:=CFile end end;
@@ -366,7 +395,11 @@ begin
               longs_(ChptTxt,RprtTxt); WriteRec(I) end
             else begin SetInpTTPos(Txt,Encryp);ReadReport(nil) end;
         'P':begin lstFD:=LastInChain(FileDRoot); ld:=LinkDRoot;
-             SetInpTTPos(Txt,Encryp);ReadProcHead;ReadProcBody;
+             SetInpTTPos(Txt,Encryp);
+             {$ifdef FPC}
+             if InpArrLen>0 then
+             {$endif}
+             begin ReadProcHead;ReadProcBody end;
              lstFD^.Chain:=nil;LinkDRoot:=ld end;
         'E':begin PushEdit;RdFormOrDesign(nil,nil,RP);E:=OldE end;
         'U':begin if not top or (I>1) then GoCompileErr(I,623);
@@ -375,10 +408,15 @@ begin
         'D':begin ResetCompilePars; SetInpTTPos(Txt,Encryp); ReadDeclChpt;
               MarkStore(p1) end;
       {$ifdef FandProlog}
-        'L':begin SetInpTTPos(Txt,Encryp); ReadProlog(I) end;
+        'L':begin SetInpTTPos(Txt,Encryp);
+            ReadProlog({$ifdef FPC}0{$else}I{$endif}) end;
       {$endif}
     end end;
-    ReleaseBoth(p1,p2);CFile:=Chpt;CRecPtr:=Chpt^.RecPtr;
+    {$ifdef FPC}
+    if PtrUInt(p1) > 65536 then ReleaseStore(p1);
+    if PtrUInt(p2) > 65536 then ReleaseStore2(p2);
+    {$else}ReleaseBoth(p1,p2);{$endif}
+    CFile:=Chpt;CRecPtr:=Chpt^.RecPtr;
     if Verif then begin ReadRec(I);b_(ChptVerif,false);WriteRec(I) end;
   end;
   with ChptTF^ do if CompileAll or CompileProc then begin
@@ -428,16 +466,26 @@ begin
   EditExecRdb:=false; top:=CRdb=nil; EscCode:=false; w:=UserW; UserW:=0;
   wasGraph:=IsGraphMode;
   {$ifdef FandSQL} if top then SQLConnect;  {$endif}
-  NewExit(Ovr,er);goto 9;
+  {$ifdef FPC}Move(ExitBuf,er,sizeof(ExitRecord)); ExitBuf.OvrEx:=Ovr; ExitBuf.ExP:=ExitP; ExitBuf.BrkP:=BreakP;
+    ExitBuf.mBP:=MyBP; if SetJmp(ExitBuf.JmpBuf)<>0 then begin GoExitFired:=true; goto 9 end else GoExitFired:=false;
+    KeepInMemory([@Brk,@cc,@p,@b,@top,@wasGraph,@w,@EO]);{$else}NewExit(Ovr,er); goto 9;{$endif}
   CreateOpenChpt(Nm,true); CompileFD:=true;
 {$ifndef FandRunV}
+  {$ifdef FPC}
+  if not IsTestRun or
+     not top and CRdb^.Encrypted then begin
+  {$else}
   if not IsTestRun or (ChptTF^.LicenseNr<>0) or
      not top and CRdb^.Encrypted then begin
+  {$endif}
 {$endif}
      MarkStore(p);EditRdbMode:=false;
      if CompileRdb(false,true,false) then
        if FindChpt('P',ProcNm,true,RP) then
-         begin NewExit(Ovr,er2);goto 0;  IsCompileErr:=false;
+         begin {$ifdef FPC}Move(ExitBuf,er2,sizeof(ExitRecord)); ExitBuf.OvrEx:=Ovr; ExitBuf.ExP:=ExitP;
+           ExitBuf.BrkP:=BreakP; ExitBuf.mBP:=MyBP; if SetJmp(ExitBuf.JmpBuf)<>0 then begin GoExitFired:=true; goto 0
+           end else GoExitFired:=false; KeepInMemory([@Brk,@cc,@p,@b,@top,@wasGraph,@w,@EO]);{$else}NewExit(Ovr,er2);
+           goto 0;{$endif} IsCompileErr:=false;
            if ProcCall<>nil then begin ProcCall^.Pos:=RP; CallProcedure(ProcCall) end
            else RunMainProc(RP,top);
            EditExecRdb:=true; goto 9;
@@ -508,7 +556,10 @@ begin
 1:  WrLLF10Msg(9); {exit} end;
   w:=PushW(1,1,TxtCols,TxtRows-1); TxtPos:=1; TextAttr:=colors.tNorm;
   OldPos:=_t(ChptTxt); S:=_longs(ChptTxt); b:=false;
-  if CRdb^.Encrypted then CodingLongStr(S); NewExit(Ovr,er); goto 4;
+  if CRdb^.Encrypted then CodingLongStr(S); {$ifdef FPC}Move(ExitBuf,er,sizeof(ExitRecord)); ExitBuf.OvrEx:=Ovr;
+    ExitBuf.ExP:=ExitP; ExitBuf.BrkP:=BreakP; ExitBuf.mBP:=MyBP; if SetJmp(ExitBuf.JmpBuf)<>0 then begin
+    GoExitFired:=true; goto 4 end else GoExitFired:=false; KeepInMemory([@w,@TxtPos,@LicNr,@S,@s2,@Srch,@Upd,@b,@OldPos,
+    @Pos,@p,@p1]);{$else}NewExit(Ovr,er); goto 4;{$endif}
   SetInpLongStr(S,false); MarkStore(p); RdUserId(false); ReleaseStore(p); b:=true;
 2:SimpleEditText('T','','',@S^.A,$7FFF,S^.LL,TxtPos,Upd);
   SetInpLongStr(S,false); MarkStore(p); RdUserId(false); ReleaseStore(p); b:=false;
@@ -523,17 +574,19 @@ procedure UpdateCat;
   begin CFile:=CatFD; if CatFD^.Handle=$FF then OpenCreateF(Exclusive);
         EO:=GetEditOpt; EO^.Flds:=AllFldsList(CatFD,true);
         EditDataFile(CatFD,EO); ChDir(OldDir); ReleaseStore(EO) end;
-var er:ExitRecord; passw:string[20]; w:PMenuBoxS; i:word;
+var er:ExitRecord; passw:string[20]; w:PMenuBoxS; i:word;{$ifdef FPC} pmk:pointer;{$endif}
 label 0,1;
 begin
-  NewExit(Ovr,er);goto 1; CreateOpenChpt(n,false);
+  {$ifdef FPC}Move(ExitBuf,er,sizeof(ExitRecord)); ExitBuf.OvrEx:=Ovr; ExitBuf.ExP:=ExitP; ExitBuf.BrkP:=BreakP;
+    ExitBuf.mBP:=MyBP; if SetJmp(ExitBuf.JmpBuf)<>0 then begin GoExitFired:=true; goto 1 end else GoExitFired:=false;
+    KeepInMemory([@w,@i]);{$else}NewExit(Ovr,er); goto 1;{$endif} CreateOpenChpt(n,false);
   if not HasPassword(Chpt,1,'') and not HasPassword(Chpt,2,'') then begin
     passw:=Password(false); if not HasPassword(Chpt,2,passw) then begin
       WrLLF10Msg(629); goto 1 end end;
   if Chpt^.UMode=RdOnly then begin UpdateCat; goto 1 end;
-  RdMsg(8); New(w,Init(43,6,StringPtr(@MsgLine))); i:=1;
+  RdMsg(8); {$ifdef FPC}MarkStore(pmk);{$endif} New(w,Init(43,6,StringPtr(@MsgLine))); i:=1;
 0:i:=w^.Exec(i); case i of
-   0:begin w^.Done; ReleaseStore(w); goto 1 end;
+   0:begin {$ifdef FPC}Dispose(w,Done); ReleaseStore(pmk){$else}w^.Done; ReleaseStore(w){$endif}; goto 1 end;
    1:begin UpdateCat;goto 0 end;
    2:UpdateUTxt;
    3:SetPassWord(Chpt,2,PassWord(true)) end;

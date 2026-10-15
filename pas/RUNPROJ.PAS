@@ -9,6 +9,7 @@ uses dos,base,access,rdrun;
 
 function IsCurrChpt:boolean;
 procedure ReleaseFDLDAfterChpt;
+function ExtToTyp(Ext:ExtStr):char;
 function RdFDSegment(FromI:word;Pos:longint):boolean;
 function ChptDel:boolean;
 function ChptWriteCRec:word; { 0-O.K., 1-fail, 2-fail and undo}
@@ -17,6 +18,12 @@ procedure EditHelpOrCat(cc,kind:word;txt:string);
 procedure StoreChptTxt(F:FieldDPtr;S:LongStrPtr;Del:boolean);
 function EditExecRdb(const Nm,ProcNm:string;ProcCall:InstrPtr):boolean;
 procedure InstallRdb(n:NameStr);
+{$ifdef FPC}
+procedure CreateOpenChpt(const Nm:string;create:boolean);
+procedure CloseChpt;
+function CompileRdb(Displ,Run,FromCtrlF10:boolean):boolean;
+procedure SetOldDcl(Txt:LongStrPtr);
+{$endif}
 
 
 implementation
@@ -33,10 +40,12 @@ uses drivers,obaseww,oaccess,
 
 
 procedure Ovr; far;
+{$ifdef FPC}begin end;{$else}
 assembler;
 asm   pop ax; pop ax; pop ax{bp}; push ax; push ax; call StackOvr;
       pop bp; pop ds; pop ax; pop dx; pop sp; push cs; push ax;
 end;
+{$endif}
 
 var E: EditDPtr absolute EditDRoot;
 

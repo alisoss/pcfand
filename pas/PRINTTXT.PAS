@@ -12,13 +12,16 @@ procedure PrintFandWork;
 
 implementation
 
-uses dos,base,drivers,obase,obaseww,access,oaccess,wwmenu,runfrml,rdrun;
+uses dos,base,drivers,obase,obaseww,access,oaccess,wwmenu,runfrml,rdrun
+{$ifdef FPC}     ,fandpdf {$endif};
 
 procedure Ovr; far;
+{$ifdef FPC}begin end;{$else}
 assembler;
 asm   pop ax; pop ax; pop ax{bp}; push ax; push ax; call StackOvr;
       pop bp; pop ds; pop ax; pop dx; pop sp; push cs; push ax;
 end;
+{$endif}
 
 var pBlk:CharArrPtr; iBlk,nBlk,Po:word;  charrd:longint;
     printBlk,outpsw:boolean;
@@ -28,16 +31,37 @@ begin
  i:=pos('#',s); if i>0 then begin delete(s,i,1); insert(sNew,s,i) end;
  replaceNo:=s;
 end;
+{$ifdef FPC}
+function PdfNameOf(const s:string):string;
+var i:integer;
+begin
+  for i:=length(s) downto 1 do begin
+    if (s[i]='/') or (s[i]='\') then break;
+    if s[i]='.' then begin PdfNameOf:=copy(s,1,i-1)+'.pdf'; exit end;
+  end;
+  PdfNameOf:=s+'.pdf';
+end;
+{$endif}
 procedure ExecMgrPgm;
 var pgmNm,param:string; x,y:byte; wmin,wmax:word; w,crs:longint;
+    {$ifdef FPC} spool:string; {$endif}
 begin
   pgmNm:=prTab(prMgrProg); if pgmNm='' then exit;
   param:=replaceNo(prTab(prMgrParam),CPath);
+  {$ifdef FPC} spool:=UnixPath(CPath); {$endif}
   wmin:=word(WindMin); wmax:=word(WindMax); crs:=CrsGet;
   w:=PushW(1,1,TxtCols,1);
   word(WindMin):=wmin; word(WindMax):=wmax; CrsSet(crs);
+  {$ifdef FPC}OSShellQuiet:=true;{$endif}         { a missing manager: the PDF below }
   OSShell(pgmNm,param,true,true,false,false);
-  asm mov ah,3; mov bh,0; push bp; int 10H; pop bp; mov x,dl; mov y,dh end;
+  {$ifdef FPC}OSShellQuiet:=false;{$endif}
+  {$ifdef FPC}
+  if (LastExitCode<>0) and (spool<>'') then
+    if FandTxtToPdf(spool,PdfNameOf(spool)) then
+      FandDeliverPdf(PdfNameOf(spool),true);
+  {$endif}
+  {$ifdef FPC}x:=WhereX+WindMin.X-1; y:=WhereY+WindMin.Y-1;{$else}
+  asm mov ah,3; mov bh,0; push bp; int 10H; pop bp; mov x,dl; mov y,dh end;{$endif}
   PopW(w); gotoxy(x-WindMin.X+1,y-WindMin.Y+1);
 end;
 var prFileNr:word;
@@ -123,7 +147,10 @@ var Ti,Times,Cp,Pl,MaxLine:word;
     FrstRun,AutoFF,FFOpt,NMOpt,He,Fo,adj:boolean;
     FoTxt,HeTxt:string; s:string3; er:ExitRecord;
 label 1,3;
-begin NewExit(Ovr,er);goto 3;  RunMsgOn('P',0);
+begin {$ifdef FPC}Move(ExitBuf,er,sizeof(ExitRecord)); ExitBuf.OvrEx:=Ovr; ExitBuf.ExP:=ExitP; ExitBuf.BrkP:=BreakP;
+  ExitBuf.mBP:=MyBP; if SetJmp(ExitBuf.JmpBuf)<>0 then begin GoExitFired:=true; goto 3 end else GoExitFired:=false;
+  KeepInMemory([@Ln,@Ti,@Times,@Cp,@Pl,@MaxLine,@FrstRun,@AutoFF,@FFOpt,@NMOpt,@He,@Fo,@adj,@FoTxt,@HeTxt,
+  @s]);{$else}NewExit(Ovr,er); goto 3;{$endif} RunMsgOn('P',0);
     FrstRun:=true; outpsw:=false; charrd:=0;
     repeat AutoFF:=false;FFOpt:=false;NMOpt:=false;He:=false;Fo:=false;
       Po:=0;Ti:=1;Cp:=spec.CpLines;Pl:=spec.AutoRprtLimit+Cp;

@@ -1,12 +1,33 @@
 
               { TYPE ACCESS }
 
+{$ifdef FPC}
+procedure UnPack(var PackArr; var NumArr; NoDigits: word);
+var src: PByte; dst: PByte; i: word; b: byte;
+begin
+  src := @PackArr;
+  dst := @NumArr;
+  i := NoDigits;
+  while i > 0 do begin
+    b := src^;
+    dst^ := (b shr 4) + $30;
+    inc(dst);
+    dec(i);
+    if i = 0 then break;
+    dst^ := (b and $0F) + $30;
+    inc(dst);
+    dec(i);
+    inc(src);
+  end;
+end;
+{$else}
 procedure UnPack(var PackArr;var NumArr;NoDigits:word); assembler;
 asm  push ds; cld; lds si,PackArr; les di,NumArr; mov dx,NoDigits; mov cl,4;
 @1:  lodsb; mov ah,al; shr al,cl; add al,30H; stosb; dec dx; jz @2;
      mov al,ah; and al,0fH; add al,30H; stosb; dec dx; jnz @1;
 @2:  pop ds;
 end;
+{$endif}
 
 type ByteMask=array[1..maxint]of byte;
 
@@ -27,6 +48,32 @@ type Fix=array[1..FixS] of byte;
      RealMask=array[0..DblS] of byte;
      Dbl=array[1..DblS]of byte;
 
+{$ifdef FPC}
+function RealFromFix(var FixNo;FLen:word):float;
+var ff:array[1..8] of byte; i:integer; v:int64; neg,isnull:boolean;
+begin
+  RealFromFix:=0; if (FLen<1) or (FLen>8) then exit;
+  move(FixNo,ff,FLen); neg:=(ff[1] and $80)<>0;
+  if neg and (ff[1]=$80) then begin
+    isnull:=true; for i:=2 to FLen do if ff[i]<>0 then isnull:=false;
+    if isnull then exit end;
+  v:=0; for i:=1 to FLen do v:=(v shl 8) or ff[i];
+  if neg and (FLen<8) then v:=v-(int64(1) shl (8*FLen));
+  RealFromFix:=v;
+end;
+procedure FixFromReal(r:float;var FixNo;flen:word);
+var ff:array[1..8] of byte; i:integer; v:int64; q:qword; lim:float;
+begin
+  if (flen<1) or (flen>8) then exit;
+  fillchar(FixNo,flen,0);
+  if r>0 then r:=r+0.5 else r:=r-0.5;
+  lim:=1.0; for i:=1 to flen do lim:=lim*256.0; lim:=lim/2.0;
+  if (r>=lim) or (r<-lim) then exit;
+  v:=trunc(r); q:=qword(v);
+  for i:=flen downto 1 do begin ff[i]:=byte(q and $FF); q:=q shr 8 end;
+  move(ff,FixNo,flen);
+end;
+{$else}
 function RealFromFix(var FixNo;FLen:word):float;
 {$ifdef Coproc}
   var r:float;rr:Dbl absolute r;
@@ -140,4 +187,5 @@ procedure FixFromReal(r:float;var FixNo;flen:word);
                         end;
         end;
   end;
+{$endif}
 {$endif}

@@ -12,20 +12,28 @@ procedure InitRunFand;
 
 implementation
 
-uses dos,graph,
+uses dos,{$ifdef FandGraph}graph,{$endif}
      drivers,base,obase,obaseww,access,oaccess,rdrun,
 {$ifdef FandSQL} channel, {$endif}
 {$ifdef FandDML}  dml,  {$endif}
-     wwmenu,wwmix,compile,rdfildcl,editor,runedi,runproj,runfrml;
+     wwmenu,wwmix,compile,rdfildcl,editor,runedi,runproj,runfrml{$ifdef FPC},runbatch{$endif};
 
 
 procedure Ovr; far;
+{$ifdef FPC}begin end;{$else}
 assembler;
 asm   pop ax; pop ax; pop ax{bp}; push ax; push ax; call StackOvr;
       pop bp; pop ds; pop ax; pop dx; pop sp; push cs; push ax;
 end;
+{$endif}
 
 
+{$ifdef FPC}
+procedure ScrGraphMode(Redraw:boolean;OldScrSeg:word);
+begin  end;
+function ScrTextMode(Redraw,Switch:boolean):word;
+begin ScrTextMode:=0;  end;
+{$else}
 procedure ScrGraphMode(Redraw:boolean;OldScrSeg:word);
 var p,p1:pointer; pofs:word absolute p;
     sz,cr,i:word; n,err:integer; b:boolean; s:string[4];
@@ -80,10 +88,55 @@ begin
   InitMouseEvents;
   CrsShow{is visible}; if not b then CrsHide;
 end;
+{$endif}
 
 
 { ********* Init FAND ***************** }
 
+{$ifdef FPC}
+function IsAT: boolean;
+begin IsAT:=true; end;
+procedure OpenXMS; begin XMSCachePages:=0 end;
+procedure OpenCache;
+begin
+  CachePageSize:=1 shl CachePageShft;
+  CachePageSz:=(CachePageSize div 16)+1;
+  InitStackSz:=2*CachePageSz; MinStackSz:=4*CachePageSz;
+  InitStack2Sz:=CachePageSz; MinStack2Sz:=CachePageSz;
+  XMSCacheRoot:=nil; XMSCachePages:=0;
+  MyHeapOrg:=nil; MemEnd:=nil;
+  FormatCache;
+  if NCachePages=0 then RunError(624);
+end;
+procedure DetectVideoCard;
+var c,r,v:word; s:string; i:integer;
+begin
+  StartAttr:=$07; TextAttr:=$07; StartMode:=3;
+  c:=80; r:=25;
+  if TermSize(c,r) then ;
+  s:=GetEnv('FAND_SIZE');
+  if s<>'' then begin
+    v:=0; i:=1;
+    while (i<=length(s)) and (s[i]>='0') and (s[i]<='9') do begin
+      v:=v*10+(ord(s[i])-48); inc(i) end;
+    if v>=80 then c:=v;
+    if (i<=length(s)) and ((s[i]='x') or (s[i]='X')) then begin
+      inc(i); v:=0;
+      while (i<=length(s)) and (s[i]>='0') and (s[i]<='9') do begin
+        v:=v*10+(ord(s[i])-48); inc(i) end;
+      if v>=25 then r:=v end;
+  end;
+  if c>MaxTxtCols then c:=MaxTxtCols;
+  if r>MaxTxtRows then r:=MaxTxtRows;
+  TxtCols:=c; TxtRows:=r;
+  InstallWinch;
+  VideoCard:=viVga; BytesPerChar:=16;
+  WindMin.X:=0; WindMin.Y:=0; WindMax.X:=c-1; WindMax.Y:=r-1;
+  NrVFont:=0; IsGraphMode:=false;
+  Crs.X:=0; Crs.Y:=0;
+  ScrSeg:=0; ChkSnow:=false;
+end;
+{$else}
 function IsAT: boolean; assembler;
 asm  mov  ax,0f000H
      mov  es,ax
@@ -159,12 +212,13 @@ asm  push bp;
      mov ScrSeg,0b000H; mov ChkSnow,0; cmp StartMode,7;{Mono} je @2;
      mov ScrSeg,0b800H; cmp VideoCard,viEga; jnb @2; mov ChkSnow,1;
 @2:  pop bp end;
+{$endif}
 
 procedure InitDrivers;
 var  kl : Char;
 begin
   BreakIntrInit;
-  DetectGraph(GraphDriver,GraphMode);
+  {$ifdef FandGraph}DetectGraph(GraphDriver,GraphMode);{$endif}
   { GraphDriver:=EGAMono; Mark***}
   DetectVideoCard;
   AssignCrt(Output); Rewrite(Output); ClrEvent;
@@ -198,12 +252,13 @@ begin
   ReadH(CfgHandle,1,prMax);
   for j:=1 to prMax do begin
     p:=BytePtr(@A); n:=0; for i:=0 to NPrintStrg do begin
-      ReadH(CfgHandle,1,l); if l=$FF then goto 1; p^:=l; inc(off);
-      ReadH(CfgHandle,l,p^); inc(off,l); inc(n,l+1) end;
+      ReadH(CfgHandle,1,l); if l=$FF then goto 1; p^:=l; {$ifdef FPC}inc(p){$else}inc(off){$endif};
+      ReadH(CfgHandle,l,p^); {$ifdef FPC}inc(p,l){$else}inc(off,l){$endif}; inc(n,l+1) end;
     ReadH(CfgHandle,1,l); if l<>$FF then begin
-  1:  writeln('Invalid FAND.CFG');wait;halt end;
+  1:  writeln('Invalid FAND.CFG');wait;{$ifdef FPC}halt(1){$else}halt{$endif} end;
     with printer[j-1] do begin
       GetMem(Strg,n); Move(A,Strg^,n); ReadH(CfgHandle,4,Typ);
+      {$ifdef FPC}Handle:=$ff;{$endif}
       OpCls:=false; ToHandle:=false; ToMgr:=false;
       if TmOut=255 then begin OpCls:=true; TmOut:=0 end
       else if TmOut=254 then begin ToHandle:=true; TmOut:=0 end
@@ -222,10 +277,10 @@ var ver:array[1..4]of char;
 begin
   CVol:=''; CPath:=MyFExpand('FAND.CFG','FANDCFG');
   CfgHandle:=OpenH(_isoldfile,RdOnly);
-  if HandleError<>0 then begin write(CPath+' not found');wait;halt end;
+  if HandleError<>0 then begin write(CPath+' not found');wait;{$ifdef FPC}halt(1){$else}halt{$endif} end;
   ReadH(CfgHandle,4,ver);
   if ver<>CfgVersion then begin
-    write('Invalid version of FAND.CFG');wait;halt end;
+    write('Invalid version of FAND.CFG');wait;{$ifdef FPC}halt(1){$else}halt{$endif} end;
   ReadH(CfgHandle,sizeof(spec),spec);
   RdColors;
   ReadH(CfgHandle,sizeof(Fonts),Fonts);
@@ -252,8 +307,21 @@ procedure CompileHelpCatDcl;
 
 { **************  Run FAND  ************************************** }
 
+const CatPathTail = 18;
+{$ifdef FPC}
+{ the paths that do not fit are a catalogue's: a task without one (the
+  samples, a batch run on a fresh clone) has nothing to cut }
+function HasCatFile(const n:string):boolean;
+var d:string;
+begin
+  d:=getenv('FANDCAT'); if d='' then
+    if TopDataDir='' then d:=TopRdbDir else d:=TopDataDir;
+  AddBackSlash(d);
+  HasCatFile:=(FSearch(n+'.CAT',d)<>'') or (FSearch(UpCase(n)+'.CAT',d)<>'');
+end;
+{$endif}
 function SetTopDir(p:PathStr;var n:NameStr):boolean;
-var e:ExtStr; er:ExitRecord;
+var e:ExtStr; er:ExitRecord; s1,s2:string;
 label 1;
 begin
   SetTopDir:=false; FSplit(FExpand(p),TopRdbDir,n,e);
@@ -264,10 +332,32 @@ begin
   if TopDataDir<>'' then TopDataDir:=FExpand(TopDataDir);
   {$I-} ChDir(TopRdbDir);{$I+}
   if IOResult<>0 then begin SetMsgPar(p); WrLLF10Msg(703); exit end;
-  CatFDName:=n; NewExit(Ovr,er); goto 1;
+  {$ifdef FPC}
+  if (CatPathName<>nil) and HasCatFile(n)
+     and (length(TopRdbDir)+CatPathTail > CatPathName^.L) then begin
+    str(length(TopRdbDir)+CatPathTail,s1); str(CatPathName^.L,s2);
+    MsgLine:='cesta je p'#253#161'li'#231' dlouh'#160' pro katalog: '
+             +s1+' > '+s2+' znak'#133;
+    WrLLF10MsgLine; exit end;
+  {$endif}
+  CatFDName:=n; {$ifdef FPC}Move(ExitBuf,er,sizeof(ExitRecord)); ExitBuf.OvrEx:=Ovr; ExitBuf.ExP:=ExitP;
+    ExitBuf.BrkP:=BreakP; ExitBuf.mBP:=MyBP; if SetJmp(ExitBuf.JmpBuf)<>0 then begin GoExitFired:=true; goto 1 end else
+    GoExitFired:=false; KeepInMemory([@e,@s1,@s2]);{$else}NewExit(Ovr,er); goto 1;{$endif}
   CFile:=CatFD; OpenF(Exclusive); SetTopDir:=true;
 1:RestoreExit(er);
 end;
+{$ifdef FPC}
+function DoBatch:integer;
+var n:NameStr; rc:integer;
+begin
+  DoBatch:=1;
+  if (paramstr(1)='--help') or (paramstr(3)='') then begin
+    DoBatch:=FandBatchRun('--help','',''); exit end;
+  if not SetTopDir(paramstr(1),n) then exit;
+  rc:=FandBatchRun(n,paramstr(2),paramstr(3));
+  CFile:=CatFD; CloseFile; DoBatch:=rc;
+end;
+{$endif}
 procedure RunRdb(p:PathStr);
   var n:NameStr;
   begin if (p<>'') and SetTopDir(p,n) then
@@ -288,24 +378,38 @@ begin CPath:=SelectDiskFile(E,35,OnFace); if CPath='' then exit; CallEditTxt end
 
 
 
+{$ifdef FPC}
+{ the terminal is gone: close the task as leaving it would - cache to the
+  files, files cut to their length }
+procedure SaveOnHangup; far;
+begin
+  if CatFD=nil then exit;
+  while CRdb<>nil do CloseChpt;
+  CFile:=CatFD; CloseFile;
+end;
+{$endif}
 procedure InitRunFand;
 var n,h,l,err,hourmin:word; s:string; nb,sec:byte;
     er:ExitRecord; i,j,MsgNr:integer; mb:PMenuBoxS;  w:longint;
-    p:pointer; x:StringPtr; xofs:word absolute x;  txt:string[16];
+    p:pointer; x:StringPtr; xofs:word absolute x;  txt:string[16];{$ifdef FPC} faceLen:word;{$endif}
     r:real;
 label 0,1,2;
 begin
   InitDrivers; WasInitDrivers:=true; InitAccess;
 {$ifdef FandDML}  InitDML;  {$endif}
-  NewExit(Ovr,er); exit;
-  inc(StackLimit,256);
+  NewExit(Ovr,er); {$ifndef FPC}exit;{$endif}
+  {$ifndef FPC}inc(StackLimit,256);{$endif}
   OldPrTimeOut:=PrTimeOut;
   CallOpenFandFiles:=OpenFandFiles; CallCloseFandFiles:=CloseFandFiles;
+  {$ifdef FPC}HangupProc:=SaveOnHangup;{$endif}
   video.CursOn:=$0607;{if exit before reading .CFG}
   KbdBuffer[0]:=#0; F10SpecKey:=0;
   if getenv('DMLADDR')<>'' then begin
-    writeln('type ''exit'' to return to FAND'); wait; halt end;
-  WrkDir:=getenv('FANDWORK'); if WrkDir='' then WrkDir:=FandDir;
+    writeln('type ''exit'' to return to FAND'); wait; {$ifdef FPC}halt(1){$else}halt{$endif} end;
+  WrkDir:=getenv('FANDWORK'); if WrkDir='' then
+    { not FAND's directory, which an installed FAND may not write: the start
+      directory, absolute, so that entering a task does not move the files }
+    WrkDir:={$ifdef FPC}OldDir{$else}FandDir{$endif};
   AddBackSlash(WrkDir);
   s:=WrkDir+'FANDWORK'; FandWorkName:=s+'.$$$';
   FandWorkXName:=s+'.X$$'; FandWorkTName:=s+'.T$$';
@@ -315,7 +419,7 @@ begin
     val(s,nb,err); {$ifndef FandRunV} if nb<=3 then {$endif}
     if err=0 then LANNode:=nb end;
   h:=ResFile.Handle; ReadH(h,2,n); if n<>ResVersion then begin
-    writeln('FAND.RES incorr. version');wait;halt end;
+    writeln('FAND.RES incorr. version');wait;{$ifdef FPC}halt(1){$else}halt{$endif} end;
   OvrHandle:=h-1;
   ReadH(h,sizeof(ResFile.A),ResFile.A); ReadH(h,2,MsgIdxN);
   l:=sizeof(TMsgIdxItem)*MsgIdxN; GetMem(MsgIdx,l); ReadH(h,l,MsgIdx^);
@@ -353,6 +457,9 @@ begin
   OpenWorkH; OpenFandFiles(false);
 
 
+{$ifdef FPC}
+  if FandBatch then halt(DoBatch);
+{$endif}
   if (paramstr(1)<>'') and (paramstr(1)<>'?') then begin
 {$ifndef FandRunV}
     if SEquUpcase(paramstr(2),'D') then begin IsTestRun:=true; goto 0 end
@@ -370,9 +477,9 @@ begin
   WriteWFrame(WHasFrame+WDoubleFrame,'','');
   ScrClr(1,1,TxtCols-2,TxtRows-13,#$b1,TextAttr);
   ScrClr(1,TxtRows-12,TxtCols-2,10,#$b2,TextAttr);
-  ResFile.Get(FandFace,p); x:=p; inc(xofs);
+  {$ifdef FPC}faceLen:={$endif}ResFile.Get(FandFace,p); x:=p; {$ifdef FPC}inc(PByte(x)){$else}inc(xofs){$endif};
   for i:=-11 to -6 do begin
-    x^[0]:=char(TxtCols-2); ScrWrStr(1,TxtRows+i,x^,TextAttr); inc(xofs,82) end;
+    x^[0]:=char(TxtCols-2); ScrWrStr(1,TxtRows+i,x^,TextAttr); {$ifdef FPC}inc(PByte(x),82){$else}inc(xofs,82){$endif} end;
   TextAttr:=colors.mHiLi; ScrClr(3,TxtRows-4,TxtCols-6,1,' ',TextAttr);
   {$ifdef Trial} RdMsg(70);
   {$else}{$ifdef FandRunV} RdMsg(42);
@@ -398,7 +505,7 @@ begin
   if TxtCols>=80 then begin
     RdMsg(40); gotoxy(51,TxtRows-3); write(MsgLine,UserLicNrShow:7) end;
 {$endif}
-2:ReleaseStore(p);
+2:{$ifdef FPC}FreeMem(p,faceLen){$else}ReleaseStore(p){$endif};
   MsgNr:=2;
 
 {$ifdef FandRunV} MsgNr:=14; {$endif}

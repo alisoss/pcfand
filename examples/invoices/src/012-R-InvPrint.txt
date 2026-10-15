@@ -1,0 +1,16 @@
+{ every invoice with its items }
+#I1_INVOICE/@ No
+#I2_ITEM/@ No
+{$include Head}
+#CH_No No, Issued, Due, Cust, CUSTOMER.Name, CUSTOMER.City;
+
+INVOICE _______           issued __.__.____      due __.__.____
+customer ______ ______________________________ ____________________
+
+product name                              quantity      price      amount
+#DE2 Prod, PRODUCT.Name, Qty, Price, Amount;
+______  ______________________________   ____.__   ______.__   _______.__
+#CF_No sum(Amount), WithVat(sum(Amount));
+                                                              ----------
+                                                  total       _______.__
+                                                  with VAT    _______.__

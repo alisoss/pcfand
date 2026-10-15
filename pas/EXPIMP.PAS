@@ -27,12 +27,18 @@ uses dos,
      wwmix,compile,rdmerg,runmerg,runedi;         {disk  hier TcFile/compress}
 
 procedure Ovr; far;
+{$ifdef FPC}begin end;{$else}
 assembler;
 asm   pop ax; pop ax; pop ax{bp}; push ax; push ax; call StackOvr;
       pop bp; pop ds; pop ax; pop dx; pop sp; push cs; push ax;
 end;
+{$endif}
 
+{$ifdef FPC}
+{$I diskfpc}
+{$else}
 {$I disk}
+{$endif}
 
 type
   VolStr = string[11];
@@ -399,7 +405,9 @@ var
   c:char; F1,F2:PhFile; er:ExitRecord; m:InOutMode;
 label 1;
 begin
-  NewExit(Ovr,er); goto 1; F1:=nil; F2:=nil;
+  {$ifdef FPC}Move(ExitBuf,er,sizeof(ExitRecord)); ExitBuf.OvrEx:=Ovr; ExitBuf.ExP:=ExitP; ExitBuf.BrkP:=BreakP;
+    ExitBuf.mBP:=MyBP; if SetJmp(ExitBuf.JmpBuf)<>0 then begin GoExitFired:=true; goto 1 end else GoExitFired:=false;
+    KeepInMemory([@c,@F1,@F2,@m]);{$else}NewExit(Ovr,er); goto 1;{$endif} F1:=nil; F2:=nil;
   with CD^ do begin
     m:=_outp; if Append then m:=_append;
     New(F1,Init(Path1,CatIRec1,_inp,0,nil));
@@ -424,7 +432,9 @@ var
 {$ifdef FandSQL}  q:SQLStreamPtr; {$endif}
 label 1;
 begin
-  NewExit(Ovr,er); goto 1; F1:=nil; {$ifdef FandSQL} q:=nil; {$endif}
+  {$ifdef FPC}Move(ExitBuf,er,sizeof(ExitRecord)); ExitBuf.OvrEx:=Ovr; ExitBuf.ExP:=ExitP; ExitBuf.BrkP:=BreakP;
+    ExitBuf.mBP:=MyBP; if SetJmp(ExitBuf.JmpBuf)<>0 then begin GoExitFired:=true; goto 1 end else GoExitFired:=false;
+    KeepInMemory([@F1,@md,@FE]);{$else}NewExit(Ovr,er); goto 1;{$endif} F1:=nil; {$ifdef FandSQL} q:=nil; {$endif}
   with CD^ do begin
   New(F1,Init(Path1,CatIRec1,_inp,0,nil));
   if HdFD<>nil then begin
@@ -452,7 +462,9 @@ var
   Scan:XScanPtr; md:LockMode; m:InOutMode;
 label 1,2;
 begin
-  NewExit(Ovr,er); goto 2; F2:=nil; Scan:=nil;
+  {$ifdef FPC}Move(ExitBuf,er,sizeof(ExitRecord)); ExitBuf.OvrEx:=Ovr; ExitBuf.ExP:=ExitP; ExitBuf.BrkP:=BreakP;
+    ExitBuf.mBP:=MyBP; if SetJmp(ExitBuf.JmpBuf)<>0 then begin GoExitFired:=true; goto 2 end else GoExitFired:=false;
+    KeepInMemory([@F2,@n,@i,@s,@Scan,@md,@m]);{$else}NewExit(Ovr,er); goto 2;{$endif} F2:=nil; Scan:=nil;
   with CD^ do begin
   m:=_outp; if Append then m:=_append;
   New(F2,Init(Path2,CatIRec2,m,0,nil));
@@ -478,7 +490,9 @@ procedure MakeMerge;
 var er:ExitRecord; s,ali:string;
 label 1;
 begin
-  NewExit(Ovr,er); goto 1;
+  {$ifdef FPC}Move(ExitBuf,er,sizeof(ExitRecord)); ExitBuf.OvrEx:=Ovr; ExitBuf.ExP:=ExitP; ExitBuf.BrkP:=BreakP;
+    ExitBuf.mBP:=MyBP; if SetJmp(ExitBuf.JmpBuf)<>0 then begin GoExitFired:=true; goto 1 end else GoExitFired:=false;
+    KeepInMemory([@s,@ali]);{$else}NewExit(Ovr,er); goto 1;{$endif}
   with CD^ do begin
     s:='#I1_'+FD1^.Name; if ViewKey<>nil then begin
       ali:=ViewKey^.Alias^; if ali='' then ali:='@'; s:=s+'/'+ali end;
@@ -500,7 +514,9 @@ begin with F2^ do begin
 var er:ExitRecord; F2:PhFile; h:word; md:LockMode; n:longint;
 label 0,1;
 begin
-  NewExit(Ovr,er); goto 1; F2:=nil;
+  {$ifdef FPC}Move(ExitBuf,er,sizeof(ExitRecord)); ExitBuf.OvrEx:=Ovr; ExitBuf.ExP:=ExitP; ExitBuf.BrkP:=BreakP;
+    ExitBuf.mBP:=MyBP; if SetJmp(ExitBuf.JmpBuf)<>0 then begin GoExitFired:=true; goto 1 end else GoExitFired:=false;
+    KeepInMemory([@F2,@h,@md,@n]);{$else}NewExit(Ovr,er); goto 1;{$endif} F2:=nil;
   with CD^ do begin
     CFile:=FD1; SaveFiles; md:=NewLMode(RdMode);
     New(F2,Init(Path2,CatIRec2,_outp,0,nil)); n:=XNRecs(FD1^.Keys) end;
@@ -527,7 +543,9 @@ begin with F1^ do begin
 var er:ExitRecord; F1:PhFile; h:word; md:LockMode;
 label 1;
 begin
-  NewExit(Ovr,er); goto 1; F1:=nil;
+  {$ifdef FPC}Move(ExitBuf,er,sizeof(ExitRecord)); ExitBuf.OvrEx:=Ovr; ExitBuf.ExP:=ExitP; ExitBuf.BrkP:=BreakP;
+    ExitBuf.mBP:=MyBP; if SetJmp(ExitBuf.JmpBuf)<>0 then begin GoExitFired:=true; goto 1 end else GoExitFired:=false;
+    KeepInMemory([@F1,@h,@md]);{$else}NewExit(Ovr,er); goto 1;{$endif} F1:=nil;
   with CD^ do begin
     New(F1,Init(Path1,CatIRec1,_inp,0,nil)); CFile:=FD2; md:=NewLMode(ExclMode) end;
   Cpy(CFile^.Handle,F1);
@@ -543,6 +561,18 @@ begin
   if (F1<>nil) and (F1^.Handle<>$FF) then F1^.Done;
 end;
 
+{$ifdef FPC}
+procedure ConvWinCp(pBuf,pKod:pointer;L:word);
+type TBA=array[0..65534] of byte;
+var i:word; b:byte;
+begin
+  if L=0 then exit;
+  for i:=0 to L-1 do begin
+    b:=TBA(pBuf^)[i];
+    if b>=$80 then TBA(pBuf^)[i]:=TBA(pKod^)[b-$80];
+  end;
+end;
+{$else}
 procedure ConvWinCp(pBuf,pKod:pointer;L:word); assembler;
 asm  push ds; mov cx,L; jcxz @3;
      lds si,pKod; les di,pBuf; xor ah,ah; cld;
@@ -550,12 +580,15 @@ asm  push ds; mov cx,L; jcxz @3;
      sub al,80H; mov bx,ax; mov al,ds:[si+bx];
 @2:  stosb; loop @1;
 @3:  pop ds end;
+{$endif}
 
 procedure MakeCopy;
 var er:ExitRecord; F1,F2:PhFile; m:InOutMode; kod:word; pKod:pointer;
 label 0,1;
 begin
-  NewExit(Ovr,er); goto 1; F1:=nil; F2:=nil;
+  {$ifdef FPC}Move(ExitBuf,er,sizeof(ExitRecord)); ExitBuf.OvrEx:=Ovr; ExitBuf.ExP:=ExitP; ExitBuf.BrkP:=BreakP;
+    ExitBuf.mBP:=MyBP; if SetJmp(ExitBuf.JmpBuf)<>0 then begin GoExitFired:=true; goto 1 end else GoExitFired:=false;
+    KeepInMemory([@F1,@F2,@m,@kod,@pKod]);{$else}NewExit(Ovr,er); goto 1;{$endif} F1:=nil; F2:=nil;
   with CD^ do begin
     New(F1,Init(Path1,CatIRec1,_inp,0,nil));
     m:=_outp; if Append then m:=_append;
@@ -823,7 +856,7 @@ end end;
 
 procedure TbFile.Backup(aIsBackup:boolean;Ir:word);
 var ArNr:string[2]; d:DirStr; n:NameStr; e:ExtStr; i:word;
-    h:word; numbers:string[80];
+    h:word; numbers:string{$ifndef FPC}[80]{$endif};
 label 1;
 begin
   IsBackup:=aIsBackup; SaveFiles;
@@ -860,9 +893,12 @@ procedure Backup(IsBackup,NoCompress:boolean;Ir:word;NoCancel:boolean);
 var F:PbFile; er:ExitRecord;
 label 1;
 begin
-  new(F,Init(NoCompress)); NewExit(Ovr,er); goto 1; LastExitCode:=1;
+  new(F,Init(NoCompress)); {$ifdef FPC}Move(ExitBuf,er,sizeof(ExitRecord)); ExitBuf.OvrEx:=Ovr; ExitBuf.ExP:=ExitP;
+    ExitBuf.BrkP:=BreakP; ExitBuf.mBP:=MyBP; if SetJmp(ExitBuf.JmpBuf)<>0 then begin GoExitFired:=true; goto 1 end else
+    GoExitFired:=false; KeepInMemory([@F]);{$else}NewExit(Ovr,er); goto 1;{$endif} LastExitCode:=1;
   F^.Backup(IsBackup,Ir); LastExitCode:=0;
-1:RestoreExit(er); ReleaseStore(F);
+1:RestoreExit(er);
+  {$ifdef FPC}Dispose(F,Done){$else}ReleaseStore(F){$endif};
   if LastExitCode<>0 then begin RunMsgOff; if not NoCancel then GoExit end;
 end;
 
@@ -907,7 +943,7 @@ begin
   GetDir(0,OldDir);
   Vol:=RdCatField(Ir,CatVolume);
   CPath:=RdCatField(Ir,CatPathName); Path:=FExpand(CPath); DrvNm:=copy(Path,1,1);
-  Dir:=aDir; AddBackSlash(Dir);
+  Dir:={$ifdef FPC}FExpand(UnixPath(aDir)){$else}aDir{$endif}; AddBackSlash(Dir);  { SetDir ChDirs into its subdirectories }
   WBase:=MaxWSize; WPos:=WBase;
 end;
 procedure TzFile.Close;
@@ -959,21 +995,31 @@ var SR:SearchRec; p:PathStr; i,n:longint; RDir:string; sl:StringList;
 label 1;
 begin
   i:=D+12; RDir:=ReadWStr(i);
+  {$ifdef FPC}
+  { FPC's FindFirst takes a #0 as part of the name, and attribute 0 does
+    not keep directories out: the files of the directory, as DOS listed
+    them for *.* - not the hidden (dot) ones }
+  p:=Dir+RDir+'*'; FindFirst(p,AnyFile,SR); n:=0;
+  {$else}
   p:=Dir+RDir+'*.*'; FindFirst(p+#00,0,SR); n:=0;
+  {$endif}
   if not(DosError in [0,18]) then begin SetMsgPar(p); RunError(904) end;
   while DosError=0 do begin
+    {$ifdef FPC}if (SR.Attr and Directory=0) and (SR.name[1]<>'.') then{$endif}
     if Msk=nil then begin
 1:    i:=StoreWStr(SR.name); if n=0 then StoreWPtr(D+4,i); inc(n) end
     else begin sl:=Msk; while sl<>nil do begin
       if EqualsMask(@SR.name[1],length(SR.name),sl^.S) then goto 1;
       sl:=sl^.Chain end end;
     FindNext(SR) end;
+  {$ifdef FPC}FindClose(SR);{$endif}
   StoreWPtr(D+8,n); StoreWPtr(DLast,0); if not SubDirOpt then exit;
-  FindFirst(p+#00,Directory,SR);
+  FindFirst({$ifdef FPC}p{$else}p+#00{$endif},Directory,SR);
   while DosError=0 do begin
     if ((SR.Attr and Directory)=Directory) and (SR.name[1]<>'.') then begin
-       i:=StoreDirD(RDir+SR.name+'\'); StoreWPtr(DLast,i); DLast:=i end;
+       i:=StoreDirD(RDir+SR.name+{$ifdef FPC}DirectorySeparator{$else}'\'{$endif}); StoreWPtr(DLast,i); DLast:=i end;
     FindNext(SR) end;
+  {$ifdef FPC}FindClose(SR);{$endif}
 end;
 procedure TzFile.GetDirs(Mask:LongStrPtr);
 var slRoot,sl:StringList; s:string; d,dLast:longint; l,i,j,n:word;
@@ -1090,7 +1136,9 @@ begin
   MarkStore(p); if PD^.IsBackup then s:=RunLongStr(PD^.bmMasks);
   new(F,Init(PD^.IsBackup,PD^.NoCompress,PD^.bmSubDir,PD^.bmOverwr,
              PD^.BrCatIRec,RunShortStr(PD^.bmDir)));
-  NewExit(Ovr,er); goto 1; LastExitCode:=1;
+  {$ifdef FPC}Move(ExitBuf,er,sizeof(ExitRecord)); ExitBuf.OvrEx:=Ovr; ExitBuf.ExP:=ExitP; ExitBuf.BrkP:=BreakP;
+    ExitBuf.mBP:=MyBP; if SetJmp(ExitBuf.JmpBuf)<>0 then begin GoExitFired:=true; goto 1 end else GoExitFired:=false;
+    KeepInMemory([@F,@s,@p]);{$else}NewExit(Ovr,er); goto 1;{$endif} LastExitCode:=1;
   if PD^.IsBackup then F^.Backup(s) else F^.Restore;
   LastExitCode:=0;
 1:RestoreExit(er); F^.Close; if LastExitCode<>0 then begin
@@ -1101,6 +1149,52 @@ end;
 {============================================================================}
 var E: EditDPtr absolute EditDRoot;
 
+{$ifdef FPC}
+{ BP7's XEncode, which the ported XDecode reads: groups of 8 items behind a
+  flag byte - a literal XOR a rotating mask, or 3..255 bytes copied from
+  an earlier place - shifted right by the most the output ever trails the
+  input (the decoder works in place) over random bytes, the mask's seed
+  and that shift at the end. S2 needs S1^.LL*9/8+6 bytes. }
+procedure XEncode(S1,S2:LongStrPtr);
+type TBA=array[0..65533] of byte;
+var a,b:^TBA; t,RMask,Flags,Mask:byte;
+    si,di,FlagPos,Len,SequPos,SequLen,Displ,NewLen,cand,cx,dx,i:longint; k:word;
+begin
+  a:=pointer(S1); b:=pointer(S2);
+  t:=byte(Timer); RMask:=$9C;
+  if t and 3<>0 then RMask:=byte((RMask shl (t and 3)) or (RMask shr (8-(t and 3))));
+  Len:=S1^.LL; si:=2; di:=2; Displ:=0; SequPos:=0;
+  repeat
+    FlagPos:=di; inc(di); Mask:=1; Flags:=0;
+    if Len=0 then begin dec(di); break end;
+    while (Len>0) and (Mask<>0) do begin
+      SequLen:=0; cand:=2;
+      repeat
+        cx:=si-cand; if cx>Len then cx:=Len;
+        if cx<=2 then break;
+        dx:=0; while (dx<cx) and (a^[cand+dx]=a^[si+dx]) do inc(dx);
+        if dx>SequLen then begin SequPos:=cand; if dx>255 then dx:=255; SequLen:=dx end;
+        inc(cand);
+      until false;
+      if SequLen>2 then begin
+        b^[di]:=SequLen; b^[di+1]:=byte(SequPos); b^[di+2]:=byte(SequPos shr 8); inc(di,3);
+        Flags:=Flags or Mask; dec(Len,SequLen); inc(si,SequLen) end
+      else begin
+        RMask:=byte((RMask shl 1) or (RMask shr 7));
+        b^[di]:=a^[si] xor RMask; inc(di); inc(si); dec(Len) end;
+      if si-di>Displ then Displ:=si-di;
+      Mask:=byte(Mask shl 1) end;
+    b^[FlagPos]:=Flags;
+  until Len=0;
+  NewLen:=di-2;
+  if Displ+NewLen+3>MaxLStrLen then RunError(661);
+  S2^.LL:=Displ+NewLen+3;
+  Move(b^[2],b^[2+Displ],NewLen);
+  b^[2+Displ+NewLen]:=t; k:=word(Displ) xor $CCCC;
+  b^[3+Displ+NewLen]:=lo(k); b^[4+Displ+NewLen]:=hi(k);
+  for i:=1 to Displ do S2^.A[i]:=char(Random(255));
+end;
+{$else}
 procedure XEncode(S1,S2:LongStrPtr);
 var Flags,Mask,RMask,t:byte; FlagPos,SequPos,SequLen,Len,NewLen,Displ,i:word;
 begin
@@ -1142,6 +1236,7 @@ asm  push ds; cld;
      pop ds end;
    for i:=1 to Displ do S2^.A[i]:=char(Random(255));
 end;
+{$endif}
 
 {$ifndef FandRunV}
 
@@ -1178,7 +1273,8 @@ begin
     Wr(^m); Wr(^j); goto 0 end;
 1:case ForwChar of
    ^z    :if PrevCompInp<>nil then begin
-            ci:=PrevCompInp;move(ci^.ChainBack,PrevCompInp,sizeof(CompInpD));
+            ci:=PrevCompInp;
+            {$ifdef FPC}LoadCompInp(ci){$else}move(ci^.ChainBack,PrevCompInp,sizeof(CompInpD)){$endif};
             if CurrPos<=InpArrLen then ForwChar:=InpArrPtr^[CurrPos];
             goto 1 end
           else begin s^.LL:=l; MyMove(ss^.A,s^.A,l); ReleaseAfterLongStr(s);
@@ -1189,7 +1285,7 @@ begin
                   0:;
                   1:begin inc(SwitchLevel); if not b then SkipLevel(true) end;
                   5:begin ci:=GetStore2(sizeof(CompInpD));
-                      move(PrevCompInp,ci^,sizeof(CompInpD));
+                      {$ifdef FPC}SaveCompInp(ci){$else}move(PrevCompInp,ci^,sizeof(CompInpD)){$endif};
                       PrevCompInp:=ci; SetInpTT(ChptIPos,true) end;
                  else if n=3 then SkipLevel(false) else dec(SwitchLevel) end;
                 goto 1 end
@@ -1202,7 +1298,7 @@ begin
                 ReadChar; goto 2 end end;
    ''''   : begin repeat Wr(ForwChar); ReadChar until ForwChar in ['''',^z];
                   if ForwChar=^z then goto 1 end;
-   ^@..' ': if not (Typ in ['R','U','E','H']) then begin
+   {$ifdef FPC}^@..#$19,#$1B..' '{$else}^@..' '{$endif}: if not (Typ in ['R','U','E','H']) then begin
               while (ForwChar<=' ') and (ForwChar<>^z) do ReadChar;
               Wr(' '); goto 1 end;
   end;
@@ -1228,7 +1324,7 @@ begin
                 posUDLI:=i; goto 1 end;
           '''': b:= not b end;
 1:    end end;
-    s2:=GetStore($fffe); XEncode(s,s2); s:=s2 end
+    s2:=GetStore({$ifdef FPC}l+l div 8+16{$else}$fffe{$endif}); XEncode(s,s2); s:=s2 end
   else Code(S^.A,l);
 2:longs_(F,s); ReleaseBoth(p,p2);
 end;

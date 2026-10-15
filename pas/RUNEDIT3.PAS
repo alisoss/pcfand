@@ -219,7 +219,10 @@ var
   p:pointer; FTyp:char; R:float; F:FieldDPtr; Del:boolean;
 label 0,1,2,3,4,5;
 begin
-  MarkStore(p); NewExit(Ovr,er);goto 2; ResetCompilePars;
+  MarkStore(p); {$ifdef FPC}Move(ExitBuf,er,sizeof(ExitRecord)); ExitBuf.OvrEx:=Ovr; ExitBuf.ExP:=ExitP;
+    ExitBuf.BrkP:=BreakP; ExitBuf.mBP:=MyBP; if SetJmp(ExitBuf.JmpBuf)<>0 then begin GoExitFired:=true; goto 2 end else
+    GoExitFired:=false; KeepInMemory([@Z,@Txt,@I,@Msg,@p,@FTyp,@R,@F,@Del]);{$else}NewExit(Ovr,er); goto 2;{$endif}
+    ResetCompilePars;
 0:Txt:=CalcTxt;
 4:I:=1;Del:=true;
 1:TxtEdCtrlUBrk:=true;TxtEdCtrlF4Brk:=true;
@@ -468,7 +471,7 @@ procedure RunEdit(PX:XStringPtr; var Brk:word);
 label 0,1,2,3,4,5,6,7,71,8,81,9,11,12,13,14,fin;
 var i,LongBeep,w:word; Displ,b:boolean; X:EdExitDPtr;
     OldTimeW,OldTimeR,n:longint; EdBr:byte;
-    Timer:longint absolute 0:$46C;
+    {$ifndef FPC}Timer:longint absolute 0:$46C;{$endif} { FPC: Drivers' Timer, WaitEvent keeps it }
 begin
   Brk:=0; DisplLL;
   if OnlySearch then goto 2;
@@ -646,7 +649,10 @@ var p:pointer;w1,w2,w3:longint; Brk,r1,r2:word; pix:boolean; er:ExitRecord;
 label 1,2;
 begin
   MarkStore(p); if EO^.SyntxChk then begin
-    IsCompileErr:=false; NewExit(Ovr,er); goto 1; NewEditD(FD,EO);
+    IsCompileErr:=false; {$ifdef FPC}Move(ExitBuf,er,sizeof(ExitRecord)); ExitBuf.OvrEx:=Ovr; ExitBuf.ExP:=ExitP;
+      ExitBuf.BrkP:=BreakP; ExitBuf.mBP:=MyBP; if SetJmp(ExitBuf.JmpBuf)<>0 then begin GoExitFired:=true; goto 1 end
+      else GoExitFired:=false; KeepInMemory([@p,@w1,@w2,@w3,@Brk,@r1,@r2,@pix]);{$else}NewExit(Ovr,er); goto 1;{$endif}
+      NewEditD(FD,EO);
 1:  RestoreExit(er); if IsCompileErr then begin
       EdRecKey:=MsgLine; LastExitCode:=CurrPos+1; IsCompileErr:=false end
     else LastExitCode:=0; goto 2 end;

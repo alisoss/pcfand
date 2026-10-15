@@ -4,7 +4,9 @@ procedure UpwEdit(LkD:LinkDPtr);forward;
 function TestAccRight(S:StringList):boolean;
 begin
   if UserCode=0 then begin TestAccRight:=true; exit end;
-  TestAccRight:=OverlapByteStr(ptr(seg(S^),ofs(S^)+5+length(S^.S)),@AccRight);
+  { the view's user codes follow its name (RdFileD) }
+  TestAccRight:=OverlapByteStr({$ifdef FPC}pointer(PtrUInt(@S^.S)+1+length(S^.S))
+    {$else}ptr(seg(S^),ofs(S^)+5+length(S^.S)){$endif},@AccRight);
 end;
 function ForNavigate(FD:FileDPtr):boolean;
 var S:StringList;
@@ -196,7 +198,9 @@ begin
   SaveFiles; MarkStore(p);
   if not PromptSortKeys(E^.Flds,SKRoot) or (SKRoot=nil) then goto 2;
   if not TryLMode(ExclMode,md,1) then goto 2;
-  NewExit(Ovr,er); goto 1;
+  {$ifdef FPC}Move(ExitBuf,er,sizeof(ExitRecord)); ExitBuf.OvrEx:=Ovr; ExitBuf.ExP:=ExitP; ExitBuf.BrkP:=BreakP;
+    ExitBuf.mBP:=MyBP; if SetJmp(ExitBuf.JmpBuf)<>0 then begin GoExitFired:=true; goto 1 end else GoExitFired:=false;
+    KeepInMemory([@SKRoot,@p,@md]);{$else}NewExit(Ovr,er); goto 1;{$endif}
   SortAndSubst(SKRoot); E^.EdUpdated:=true;
 1:RestoreExit(er); CFile:=E^.FD; OldLMode(md);
 2:ReleaseStore(p); CRecPtr:=E^.NewRecPtr; DisplAllWwRecs;

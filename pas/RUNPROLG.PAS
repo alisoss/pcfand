@@ -39,10 +39,12 @@ uses drivers,obaseww,oaccess,runfrml,runproc,sort {$ifdef FandSQL}
      ,compile,editor,rdprolg;
 
 procedure Ovr; far;
+{$ifdef FPC}begin end;{$else}
 assembler;
 asm   pop ax; pop ax; pop ax{bp}; push ax; push ax; call StackOvr;
       pop bp; pop ds; pop ax; pop dx; pop sp; push cs; push ax;
 end;
+{$endif}
 
 const
   MaxPackedPredLen = 4000;
@@ -69,10 +71,16 @@ type
   TFileScan = record IRec,Count:longint end;
 
 var CurrInst:PInstance;
-    PackedTermPtr:Pchar; PTPMaxOfs:word;
+    PackedTermPtr:Pchar; PTPMaxOfs:SgOfsInt;
     TrcLevel,CallLevel:integer;
     LexemList:PTerm;
 
+{$ifdef FPC}
+function Trace:boolean;
+begin Trace:=(TrcLevel<>0) and (TrcLevel>=CallLevel); end;
+procedure SetCallLevel(Lv:word);
+begin CallLevel:=Lv; if Lv=0 then TrcLevel:=0; end;
+{$else}
 function Trace:boolean; assembler;
 asm xor ax,ax; mov bx,TrcLevel; cmp bx,ax; je @1;
     cmp bx,CallLevel; jb @1; mov ax,1; { if TrcLevel<>0 and >=CallLevel }
@@ -81,6 +89,7 @@ procedure SetCallLevel(Lv:word); assembler;
 asm mov ax,Lv; mov CallLevel,ax; { CallLevel=lv  if =0 then TrcLevel=0 }
     cmp ax,0; jne @1; mov TrcLevel,ax;
 @1: end;
+{$endif}
 procedure WaitC;
 var c:word;
 begin c:=readkey; if (c=_ESC_) and PromptYN(21) then GoExit  end;
@@ -105,42 +114,61 @@ begin
       p2:=p1; p1:=p1^.Chain end;
     p1:=GetStore2(n); p1^.Sz:=n;
 1:  p1^.Chain:=CurBlk; CurBlk:=p1;
-    CurLoc:=Ptr(Seg(p1^),Ofs(p1^)+sizeof(TMemBlkHd));
+    CurLoc:={$ifdef FPC}pointer(PtrUInt(p1)+sizeof(TMemBlkHd)){$else}Ptr(Seg(p1^),Ofs(p1^)+sizeof(TMemBlkHd)){$endif};
     RestSz:=p1^.Sz-sizeof(TMemBlkHd) end;
-  p:=CurLoc; inc(PtrRec(CurLoc).Ofs,Sz); dec(RestSz,Sz);
-  asm les di,p; mov al,0; mov cx,Sz; cld; rep stosb end;
+  p:=CurLoc; {$ifdef FPC}inc(CurLoc,Sz);{$else}inc(PtrRec(CurLoc).Ofs,Sz);{$endif} dec(RestSz,Sz);
+  {$ifdef FPC}FillChar(p^,Sz,0);{$else}
+  asm les di,p; mov al,0; mov cx,Sz; cld; rep stosb end;{$endif}
   Get:=p;
 end;
 function TMemory.Mark:pointer;
 begin
   Mark:=CurLoc;
 end;
+{$ifdef FPC}
+{ P is a place in block B's data - its end included: a mark taken when B
+  was full points there }
+function InBlk(B:PMemBlkHd;P:pointer):boolean;
+begin InBlk:=(PtrUInt(P)>=PtrUInt(B)+sizeof(TMemBlkHd)) and (PtrUInt(P)<=PtrUInt(B)+B^.Sz) end;
+{$endif}
 procedure TMemory.Release(P:pointer);   { only for pure stack }
 var p1,p2:PMemBlkHd;
 begin
   p1:=CurBlk;
+  {$ifdef FPC}
+  while (p1<>nil) and not InBlk(p1,P) do begin
+  {$else}
   while PtrRec(p1).Seg<>PtrRec(p).Seg do begin
+  {$endif}
     p2:=p1^.Chain; p1^.Chain:=FreeMemList; FreeMemList:=p1; p1:=p2 end;
   CurBlk:=p1; CurLoc:=p;
   if p=nil then RestSz:=0 else
+  {$ifdef FPC}
+  RestSz:=PtrUInt(p1)+p1^.Sz-PtrUInt(p);
+  {$else}
   RestSz:=p1^.Sz-(PtrRec(p).Ofs-(PtrRec(p1).Ofs+sizeof(TMemBlkHd)));
+  {$endif}
 end;
 function TMemory.StoreStr(const s:string):PString;
 var p:pointer;
 begin
   p:=Get(length(s)+1); move(s,p^,length(s)+1); StoreStr:=p;
 end;
+{ sizes in 8 bytes, BP7's free-block header (4+2) fits; FPC's (8+2) needs 16 }
+function RoundSz(Sz:word):word;
+begin RoundSz:={$ifdef FPC}(Sz+15) and $fff0{$else}(Sz+7) and $fff8{$endif} end;
 function TMemory.Alloc(Sz:word):pointer; { doesn't free once allocated blocks }
 var p,p1,p2:PMemBlkHd;
 begin
-  Sz:=(Sz+7) and $fff8;
+  Sz:=RoundSz(Sz);
   p1:=PMemBlkHd(@FreeList); p:=FreeList; while p<>nil do begin
     if p^.Sz>=Sz then begin
       if p^.Sz>Sz then begin
-	p2:=p; inc(PtrRec(p2).Ofs,Sz);
+	p2:=p; {$ifdef FPC}p2:=PMemBlkHd(PtrUInt(p)+Sz);{$else}inc(PtrRec(p2).Ofs,Sz);{$endif}
 	p1^.Chain:=p2; p2^.Chain:=p^.Chain; p2^.Sz:=p^.Sz-Sz end
       else p1^.Chain:=p^.Chain;
-      asm les di,p; mov al,0; mov cx,Sz; cld; rep stosb end;
+      {$ifdef FPC}FillChar(p^,Sz,0);{$else}
+      asm les di,p; mov al,0; mov cx,Sz; cld; rep stosb end;{$endif}
       Alloc:=p; exit end;
     p1:=p; p:=p^.Chain end;
   Alloc:=Get(Sz);
@@ -148,7 +176,17 @@ end;
 procedure TMemory.Free(P:pointer;Sz:word);
 var p1,p2:PMemBlkHd; pp:PMemBlkHd absolute P;
 begin
-  Sz:=(Sz+7) and $fff8; p1:=PMemBlkHd(@FreeList); p2:=FreeList;
+  Sz:=RoundSz(Sz); p1:=PMemBlkHd(@FreeList); p2:=FreeList;
+  {$ifdef FPC}
+  while (p2<>nil) and (PtrUInt(p2)<PtrUInt(P)) do begin
+    p1:=p2; p2:=p2^.Chain end;
+  if (p2<>nil) and (PtrUInt(P)+Sz=PtrUInt(p2)) then begin
+    pp^.Sz:=Sz+p2^.Sz; pp^.Chain:=p2^.Chain end
+  else begin pp^.Sz:=Sz; pp^.Chain:=p2 end;
+  if (p1<>PMemBlkHd(@FreeList)) and (PtrUInt(p1)+p1^.Sz=PtrUInt(P)) then begin
+    p1^.Sz:=p1^.Sz+pp^.Sz; p1^.Chain:=pp^.Chain end
+  else p1^.Chain:=pp;
+  {$else}
   while (PtrRec(p2).Seg<>0) and (PtrRec(p2).Seg<>PtrRec(P).Seg) do begin
     p1:=p2; p2:=p2^.Chain end;
   while (PtrRec(p2).Seg=PtrRec(P).Seg) and (PtrRec(p2).Ofs<PtrRec(P).Ofs) do begin
@@ -159,6 +197,7 @@ begin
   if (PtrRec(p1).Seg=PtrRec(P).Seg) and (PtrRec(p1).Ofs+p1^.Sz=PtrRec(P).Ofs) then begin
     p1^.Sz:=p1^.Sz+pp^.Sz; p1^.Chain:=pp^.Chain end
   else p1^.Chain:=pp;
+  {$endif}
 end;
 
 
@@ -168,7 +207,7 @@ end;
 function GetFunDcl(D:word;I:byte):PFunDcl;
 var fd:PFunDcl; fdofs:word absolute fd;
 begin
-  PtrRec(fd).Seg:=_Sg; fdofs:=PDomain(ptr(_Sg,D))^.FunDcl;
+  SgFix(fd); fdofs:=PDomain(SgPtr(D))^.FunDcl;
   while i>0 do begin dec(i); fdofs:=fd^.Chain end;
   GetFunDcl:=fd;
 end;
@@ -209,15 +248,20 @@ end;
 function GetListTerm(aElem:PTerm;aNext:PTerm):PTerm;
 var t:PTerm;
 begin
-  t:=Mem1.Get(1+2*4); GetListTerm:=t; with t^ do begin
+  t:=Mem1.Get(1+2*sizeof(PTerm)); GetListTerm:=t; with t^ do begin
     Fun:=_ListT; Elem:=aElem; Next:=aNext end;
 end;
 function GetFunTerm(aFun:byte;aArity:byte):PTerm;
 var t:PTerm;
 begin
-  t:=Mem1.Get(1+1+aArity*4); GetFunTerm:=t;
+  t:=Mem1.Get(1+1+aArity*sizeof(PTerm)); GetFunTerm:=t;
   with t^ do begin Fun:=aFun; Arity:=aArity end;
 end;
+{$ifdef FPC}
+procedure ChainList(var Frst; New:pointer);
+var pp:PtrPointer;
+begin pp:=PtrPointer(@Frst); while pp^<>nil do pp:=PtrPointer(@(PTerm(pp^)^.Next)); pp^:=New end;
+{$else}
 procedure ChainList(var Frst; New:pointer); assembler;
 asm  push ds; lds si,Frst; sub si,TTerm.Next;
 @1:  cmp [si+2].TTerm.Next.word,0; je @2;
@@ -226,6 +270,7 @@ asm  push ds; lds si,Frst; sub si,TTerm.Next;
 @2:  les di,New; mov [si].TTerm.Next.word,di; mov [si+2].TTerm.Next.word,es;
      pop ds;
 end;
+{$endif}
 
 var XXS:string;
 
@@ -264,7 +309,7 @@ end;
 function RunIExpr(TOfs:word{PPTerm}):integer;
 var t:PPTerm;
 begin
-  t:=ptr(_Sg,TOfs);
+  t:=SgPtr(TOfs);
   if t^.Fun=_VarT then begin RunIExpr:=CurrInst^.Vars[t^.Idx]^.II; exit end;
   case t^.Op of
    _const:RunIExpr:=t^.II;
@@ -285,7 +330,7 @@ end;
 function RunRExpr(TOfs:word{PPTerm}):float;
 var t:PPTerm;
 begin
-  t:=ptr(_Sg,TOfs);
+  t:=SgPtr(TOfs);
   if t^.Fun=_VarT then begin RunRExpr:=CurrInst^.Vars[t^.Idx]^.RR; exit end;
   case t^.Op of
    _const:RunRExpr:=t^.RR;
@@ -310,7 +355,7 @@ procedure RunSExpr(TOfs:word;var s:string);
 var t:PPTerm; i,n,l:word; p:LongStrPtr; q:StringPtr;
 label 1,2;
 begin
-  t:=ptr(_Sg,TOfs);
+  t:=SgPtr(TOfs);
   if t^.Fun=_VarT then begin q:=@CurrInst^.Vars[t^.Idx]^.SS; goto 1 end else
   case t^.Op of
    _const: begin q:=@t^.SS;
@@ -336,14 +381,15 @@ function RunLSExpr(TOfs:word):LongStrPtr;
 var t:PPTerm; p,p2:LongStrPtr; l:word; s:StringPtr;
 label 1;
 begin
-  t:=ptr(_Sg,TOfs);
+  t:=SgPtr(TOfs);
   if t^.Fun=_VarT then p:=RdLongStr(CurrInst^.Vars[t^.Idx]^.Pos)
   else case t^.Op of
    _const: begin l:=length(t^.SS); p:=GetStore(l+2); p^.LL:=l;
            move(t^.SS[1],p^.A,l) end;
    '+':    begin p:=RunLSExpr(t^.E1); p2:=RunLSExpr(t^.E2); l:=p2^.LL;
            p^.LL:=p^.LL+l; move(p2^.A,p2^.LL,l);  ReleaseAfterLongStr(p) end;
-   _conv:  begin p:=GetStore(257); s:=ptr(PtrRec(p).Seg,PtrRec(p).Ofs+1);
+   _conv:  begin p:=GetStore(257);
+           s:={$ifdef FPC}StringPtr(PtrUInt(p)+1){$else}ptr(PtrRec(p).Seg,PtrRec(p).Ofs+1){$endif};
            RunSExpr(t^.E1,s^); p^.LL:=length(s^); ReleaseAfterLongStr(p) end;
    end;
   RunLSExpr:=p;
@@ -390,7 +436,7 @@ label 1;
 begin
   UnifyTermsCV:=true;
   if T2Ofs=0 then begin if T1<>nil then UnifyTermsCV:=false; exit end;
-  t2:=ptr(_Sg,T2Ofs);
+  t2:=SgPtr(T2Ofs);
   case t2^.Fun of
     _VarT: if t2^.Bound then
              UnifyTermsCV:=UnifyTermsCC(T1,CurrInst^.Vars[T2^.Idx])
@@ -405,7 +451,7 @@ begin
         _LongStrT:begin p:=RdLongStr(T1^.Pos); p2:=RunLSExpr(T2Ofs);
              UnifyTermsCV:=EquLongStr(p,p2); ReleaseStore(p) end;
 	_ListT: begin while T2^.Op='+' do begin
-               if not UnifyVList(T1,ptr(_Sg,T2^.E1)) then goto 1; T2Ofs:=T2^.E2 end;
+               if not UnifyVList(T1,SgPtr(T2^.E1)) then goto 1; T2Ofs:=T2^.E2 end;
              if not UnifyVList(T1,T2) or (T1<>nil) then goto 1 end;
 	else for i:=0 to integer(T1^.Arity)-1 do
   	  if not UnifyTermsCV(T1^.Arg[i],T2^.Arg[i]) then begin
@@ -421,7 +467,7 @@ function CopyCList(T:PTerm):PTerm;
 var root,t1,prev:PTerm;
 begin
   if T=nil then begin CopyCList:=nil; exit end;  root:=nil;
-  repeat t1:=Mem1.Get(1+2*4); t1^.Fun:=_ListT; t1^.Elem:=T^.Elem;
+  repeat t1:=Mem1.Get(1+2*sizeof(PTerm)); t1^.Fun:=_ListT; t1^.Elem:=T^.Elem;
     if root=nil then root:=t1 else prev^.Next:=t1;
     prev:=t1; T:=T^.Next until T=nil;
   CopyCList:=root;
@@ -435,7 +481,7 @@ begin
 1:if T^.Fun=_VarT then begin
     t1:=CurrInst^.Vars[T^.Idx]; if Cpy then t1:=CopyCList(t1) end
   else begin
-    t1:=Mem1.Get(1+2*4); t1^.Fun:=_ListT; t1^.Elem:=CopyTerm(T^.Elem) end;
+    t1:=Mem1.Get(1+2*sizeof(PTerm)); t1^.Fun:=_ListT; t1^.Elem:=CopyTerm(T^.Elem) end;
   if root=nil then root:=t1 else prev^.Next:=t1;
   if (T^.Fun<>_VarT) then begin
     prev:=t1; tofs:=T^.Next; if tofs<>0 then goto 1 end;
@@ -444,7 +490,7 @@ end;
 var t,t1:PPTerm; tofs:word absolute t; t2:PTerm; i:integer; p:LongStrPtr;
 begin
   if TOff=0 then begin CopyTerm:=nil; exit end;
-  t:=ptr(_Sg,TOff);
+  t:=SgPtr(TOff);
   case t^.Fun of
     _IntT : CopyTerm:=GetIntTerm(RunIExpr(TOfs));
     _RealT: CopyTerm:=GetRealTerm(RunRExpr(TOfs));
@@ -454,23 +500,25 @@ begin
             ReleaseStore(p) end;
     _VarT : CopyTerm:=CurrInst^.Vars[T^.Idx];
     _ListT: begin t2:=nil; while t^.Op='+' do begin
-              ChainList(t2,CopyVList(ptr(_Sg,t^.E1),true)); tofs:=t^.E2 end;
+              ChainList(t2,CopyVList(SgPtr(t^.E1),true)); tofs:=t^.E2 end;
             ChainList(t2,CopyVList(t,false)); CopyTerm:=t2 end;
     else    t2:=GetFunTerm(T^.Fun,T^.Arity);
        for i:=0 to integer(T^.Arity)-1 do t2^.Arg[i]:=CopyTerm(T^.Arg[i]);
        CopyTerm:=t2 end;
 end;
+{ packed terms - saved databases, terms in T fields - keep reals as the
+  DOS build without coprocessor did (HasCoproc=false): 6-byte Real48 }
 procedure PackTermC(T:PTerm);
 var p:Pchar absolute PackedTermPtr; i:integer; n:word; wp:WordPtr;
 label 1;
 begin
-  if PtrRec(p).Ofs>=PTPMaxOfs then RunError(1527);
+  if AdrOfs(p)>=PTPMaxOfs then RunError(1527);
 1:if T=nil { [] } then begin WordPtr(p)^:=0; inc(p,2) end else
   case T^.Fun of
     _IntT : begin IntegerPtr(P)^:=T^.II; inc(p,2) end;
-    _RealT: begin FloatPtr(p)^:=T^.RR; inc(p,sizeof(float)) end;
+    _RealT: begin {$ifdef FPC}FloatToReal48(T^.RR,p); inc(p,6){$else}FloatPtr(p)^:=T^.RR; inc(p,sizeof(float)){$endif} end;
     _StrT : begin
-            n:=length(t^.SS)+1; if PtrRec(p).Ofs+n>=PTPMaxOfs then RunError(1527);
+            n:=length(t^.SS)+1; if AdrOfs(p)+n>=PTPMaxOfs then RunError(1527);
             move(t^.SS,p^,n); inc(p,n) end;
     _LongStrT: RunError(1543);
     _ListT: begin wp:=WordPtr(p); inc(p,2);
@@ -498,19 +546,20 @@ var p:Pchar absolute PackedTermPtr; i:integer; n:word; wp:WordPtr;
     t:PPTerm; tofs:word absolute t; t1:PTerm;
 label 1,2;
 begin
-  if PtrRec(p).Ofs>=PTPMaxOfs then RunError(1527); t:=ptr(_Sg,TOff);
+  if AdrOfs(p)>=PTPMaxOfs then RunError(1527); t:=SgPtr(TOff);
 1:if tofs=0 { [] } then begin WordPtr(p)^:=0; inc(p,2) end else
   case T^.Fun of
     _VarT : PackTermC(CurrInst^.Vars[T^.Idx]);
     _IntT : begin IntegerPtr(P)^:=RunIExpr(tofs); inc(p,2) end;
-    _RealT: begin FloatPtr(p)^:=RunRExpr(tofs); inc(p,sizeof(float)) end;
+    _RealT: begin {$ifdef FPC}FloatToReal48(RunRExpr(tofs),p); inc(p,6){$else}FloatPtr(p)^:=RunRExpr(tofs); inc(p,
+      sizeof(float)){$endif} end;
     _StrT : begin RunSExpr(tofs,XXS);
-            n:=length(XXS)+1; if PtrRec(p).Ofs+n>=PTPMaxOfs then RunError(1527);
+            n:=length(XXS)+1; if AdrOfs(p)+n>=PTPMaxOfs then RunError(1527);
             move(XXS,p^,n); inc(p,n) end;
     _LongStrT: RunError(1543);
     _ListT: begin wp:=WordPtr(p); inc(p,2); wp^:=0;
             while t^.Op='+' do begin
-              inc(wp^,PackVList(ptr(_Sg,t^.E1))); tofs:=t^.E2 end;
+              inc(wp^,PackVList(SgPtr(t^.E1))); tofs:=t^.E2 end;
             inc(wp^,PackVList(t)) end;
     else    p^:=char(t^.Fun); inc(p);
             for i:=0 to integer(t^.Arity)-1 do PackTermV(t^.Arg[i]) end;
@@ -519,8 +568,8 @@ function GetPackedTerm(T:PTerm):LongStrPtr;
 var pt:Pchar absolute PackedTermPtr;  A:array[1..MaxPackedPredLen] of char;
     s:LongStrPtr; n:word;
 begin
-  pt:=Pchar(@A); PTPMaxOfs:=ofs(A)+MaxPackedPredLen-2;
-  PackTermC(T); n:=PtrRec(pt).Ofs-ofs(A);
+  pt:=Pchar(@A); PTPMaxOfs:=AdrOfs(@A)+MaxPackedPredLen-2;
+  PackTermC(T); n:=AdrOfs(pt)-AdrOfs(@A);
   s:=GetStore(2+n); s^.LL:=n; move(A,s^.A,n);
   GetPackedTerm:=s;
 end;
@@ -528,13 +577,13 @@ function UnpackTerm(D:word):PTerm;
 var p:Pchar absolute PackedTermPtr;
     i:integer; n:word; q:Pchar; t,tPrev,t1:PTerm; f:PFunDcl;
 begin
-  case PDomain(ptr(_Sg,D))^.Typ of
+  case PDomain(SgPtr(D))^.Typ of
    _IntD : begin t:=GetIntTerm(IntegerPtr(p)^); inc(p,2) end;
-   _RealD: begin t:=GetRealTerm(FloatPtr(p)^); inc(p,sizeof(float)) end;
+   _RealD: begin t:=GetRealTerm({$ifdef FPC}Real48ToFloat(p)); inc(p,6){$else}FloatPtr(p)^); inc(p,sizeof(float)){$endif} end;
    _StrD : begin t:=GetStringTerm(StringPtr(p)^); inc(p,ord(p^)+1) end;
    _LongStrD: RunError(1543);
    _ListD: begin n:=WordPtr(p)^; inc(p,2); T:=nil; while n>0 do begin
-             t1:=GetListTerm(UnpackTerm(PDomain(ptr(_Sg,D))^.ElemDom),nil);
+             t1:=GetListTerm(UnpackTerm(PDomain(SgPtr(D))^.ElemDom),nil);
              if t=nil then t:=t1 else tPrev^.Next:=t1; tPrev:=t1; dec(n) end end;
    else    n:=ord(p^); inc(p); f:=getFunDcl(D,n); t:=GetFunTerm(n,f^.Arity);
 	   for i:=0 to integer(f^.Arity)-1 do t^.arg[i]:=UnpackTerm(f^.Arg[i]) end;
@@ -543,16 +592,16 @@ end;
 function PrintPackedTerm(P:Pchar;D:word):Pchar;
 var i,n:integer; f:PFunDcl;
 begin
-  case PDomain(ptr(_Sg,D))^.Typ of
+  case PDomain(SgPtr(D))^.Typ of
    _IntD : begin write(IntegerPtr(p)^); inc(p,2) end;
-   _RealD: begin write(FloatPtr(p)^); inc(p,sizeof(float)) end;
+   _RealD: begin write({$ifdef FPC}Real48ToFloat(p)); inc(p,6){$else}FloatPtr(p)^); inc(p,sizeof(float)){$endif} end;
    _StrD : begin write('''',StringPtr(p)^,''''); inc(p,ord(p^)+1) end;
    _ListD: begin write('['); n:=WordPtr(p)^; inc(p,2); for i:=1 to n do begin
              if i>1 then write(',');
-             p:=PrintPackedTerm(p,PDomain(ptr(_Sg,D))^.ElemDom) end;
+             p:=PrintPackedTerm(p,PDomain(SgPtr(D))^.ElemDom) end;
            write(']') end;
    else    f:=getFunDcl(D,ord(p^)); inc(p);
-           write(StringPtr(ptr(_Sg,f^.Name))^); if f^.Arity>0 then
+           write(StringPtr(SgPtr(f^.Name))^); if f^.Arity>0 then
            begin write('('); for i:=1 to f^.Arity do begin
 	     if i>1 then write(','); p:=PrintPackedTerm(p,f^.Arg[i-1]) end;
   	     write(')') end end;
@@ -561,7 +610,7 @@ end;
 procedure PrintPackedPred(Q:Pchar;POfs:word{PPredicate});
 var i,n:integer; p:PPredicate;
 begin
-  p:=ptr(_Sg,POfs); write('CALL assert(',PString(ptr(_Sg,p^.Name))^);
+  p:=SgPtr(POfs); write('CALL assert(',PString(SgPtr(p^.Name))^);
   n:=p^.Arity; if n>0 then begin write('(');
     for i:=1 to n do begin
       if i>1 then write(','); inc(q,2); q:=PrintPackedTerm(q,p^.Arg[i-1]) end;
@@ -579,14 +628,14 @@ begin
     _StrT : write('''',T^.SS,'''');
     _LongStrT: begin p:=RdLongStr(T^.Pos); write('''');
             for i:=1 to p^.LL do write(p^.A[i]); write(''''); ReleaseStore(p) end;
-    _ListT: begin write('['); d:=ptr(_Sg,DOfs); i:=0;
+    _ListT: begin write('['); d:=SgPtr(DOfs); i:=0;
 1:          PrintTerm(T^.Elem,d^.ElemDom); T:=T^.Next;
    	    if T<>nil then begin write(','); inc(i);
               if (i=3) and (d^.Name='L_Lexem') then write('...') else
               goto 1 end;
   	    write(']') end;
     else    fd:=GetFunDcl(DOfs,T^.Fun);
-        write(StringPtr(ptr(_Sg,fd^.Name))^); if T^.Arity=0 then exit;
+        write(StringPtr(SgPtr(fd^.Name))^); if T^.Arity=0 then exit;
 	write('('); for i:=0 to T^.Arity-1 do begin
 	  if i>0 then write(','); PrintTerm(T^.Arg[i],fd^.Arg[i]) end;
 	write(')') end;
@@ -596,26 +645,26 @@ function LenDbEntry(S:LongStrPtr;Arity:integer):word;
 var n:word; i:integer;
 begin
   n:=0; for i:=1 to Arity do begin
-    inc(n,S^.LL+2); inc(PtrRec(S).Ofs,S^.LL+2) end;
+    inc(n,S^.LL+2); {$ifdef FPC}S:=LongStrPtr(PtrUInt(S)+S^.LL+2){$else}inc(PtrRec(S).Ofs,S^.LL+2){$endif} end;
   LenDbEntry:=n;
 end;
 function SaveDb(DbOfs:word{PDatabase};AA:longint):LongStrPtr;
 var n,arity:word; l:longint; s:LongStrPtr; q:Pchar; x:boolean;
     p:PPredicate; pofs:word absolute p; b:PDbBranch; db:PDatabase;
 begin
-  s:=GetStore(2); db:=ptr(_Sg,DbOfs); p:=ptr(_Sg,Db^.Pred); x:=AA<>0;
+  s:=GetStore(2); db:=SgPtr(DbOfs); p:=SgPtr(Db^.Pred); x:=AA<>0;
   while pofs<>0 do begin
   if (p^.Opt and _FandCallOpt)=0 then begin
     arity:=p^.Arity;
     if not x then begin
-      StoreStr(PString(ptr(_Sg,p^.Name))^); BytePtr(GetStore(1))^:=arity end;
+      StoreStr(PString(SgPtr(p^.Name))^); BytePtr(GetStore(1))^:=arity end;
     b:=PDbBranch(p^.Branch);
     while b<>nil do begin n:=LenDbEntry(LongStrPtr(@b^.LL),arity);
-      q:=GetStore(n+1); if x and (AbsAdr(HeapPtr)-AA>MaxLStrLen) then OldError(544);
+      q:=GetStore(n+1); if x and (AbsAdr(HeapTop)-AA>MaxLStrLen) then OldError(544);
       q[0]:=#1; move(b^.LL,q[1],n); b:=b^.Chain end;
     BytePtr(GetStore(1))^:=0 end;
   pofs:=p^.ChainDb end;
-  l:=AbsAdr(HeapPtr)-AbsAdr(s)-2; s^.LL:=l; if l>MaxLStrLen then begin
+  l:=AbsAdr(HeapTop)-AbsAdr(s)-2; s^.LL:=l; if l>MaxLStrLen then begin
     SetMsgPar(Db^.Name); RunError(1532) end;
   SaveDb:=s;
 end;
@@ -624,14 +673,14 @@ var n:word; q:Pchar; p:PPredicate; pofs:word absolute p;
     b:PDbBranch; db:PDatabase;
 label 1;
 begin
-  q:=Pchar(@S^.A); db:=ptr(_Sg,DbOfs); p:=ptr(_Sg,Db^.Pred);
+  q:=Pchar(@S^.A); db:=SgPtr(DbOfs); p:=SgPtr(Db^.Pred);
   while pofs<>0 do begin
   if (p^.Opt and _FandCallOpt)=0 then begin
-    if PtrRec(S).Seg<>_Sg then begin
-      if StringPtr(q)^<>PString(ptr(_Sg,p^.Name))^ then goto 1; inc(q,ord(q^)+1);
+    if not InSg(S) then begin
+      if StringPtr(q)^<>PString(SgPtr(p^.Name))^ then goto 1; inc(q,ord(q^)+1);
       if ord(q^)<>p^.Arity then goto 1; inc(q) end;
     while q[0]=#1 do begin inc(q); n:=LenDbEntry(LongStrPtr(q),p^.Arity);
-      b:=Mem3.Alloc(n+4); ChainLast(p^.Branch,b); move(q[0],b^.LL,n);
+      b:=Mem3.Alloc(n+sizeof(pointer)); ChainLast(p^.Branch,b); move(q[0],b^.LL,n);
       inc(q,n) end;
     if q[0]<>#0 then goto 1; inc(q) end;
   pofs:=p^.ChainDb end;
@@ -640,7 +689,7 @@ begin
 end;
 function Vokal(C:char):boolean;
 begin
-  Vokal:=CurrToKamen(C) in ['a','†','Ñ','e','Ç','à','i','°','o','¢','ì','î','u','£','ñ','Å','y','ò'];
+  Vokal:=CurrToKamen(C) in ['a',#$a0,#$84,'e',#$82,#$88,'i',#$a1,'o',#$a2,#$93,#$94,'u',#$a3,#$96,#$81,'y',#$98];
 end;
 function IsUpper(C:char):boolean;
 begin
@@ -697,8 +746,8 @@ var l,l1,l2,l3,n,m,w:word; s:string; p,p1,p2,p3:LongStrPtr;
     c:PCommand; b:boolean; q:PInstance; pos:RdbPos;
 label 1,2,3;
 begin with CurrInst^ do begin
-  c:=ptr(_Sg,RetCmd); w:=c^.InpMask;
-  case PPredicate(ptr(_Sg,Pred))^.LocVarSz of
+  c:=SgPtr(RetCmd); w:=c^.InpMask;
+  case PPredicate(SgPtr(Pred))^.LocVarSz of
   _NextLexP: if LexemList<>nil then LexemList:=LexemList^.Next;
   _GetLexP: Vars[0]:=LexemList;
   _ConcatP : case w of
@@ -814,7 +863,7 @@ begin with CurrInst^ do begin
    _DelP:begin
            q:=CurrInst; t1:=PTerm(NextBranch); if t1=nil then t1:=Vars[1];
 2:         if t1=nil then goto 1; Vars[0]:=t1^.Elem; CurrInst:=RetInst;
-           b:=UnifyTermsCV(t1^.Elem,PTermList(ptr(_Sg,c^.Arg))^.Elem);
+           b:=UnifyTermsCV(t1^.Elem,PTermList(SgPtr(c^.Arg))^.Elem);
            CurrInst:=q; if b then begin
              root:=nil; t:=Vars[1]; while t<>t1 do begin
                t2:=GetListTerm(t^.Elem,nil);
@@ -902,22 +951,22 @@ procedure RetractDbEntry(Q:Pinstance;POfs:word{PPredicate};B:PDbBranch);
 var b1:PDbBranch; p:PPredicate;
 label 1;
 begin
-  p:=ptr(_Sg,POfs); b1:=PDbBranch(@P^.Branch);
+  p:=SgPtr(POfs); b1:=PDbBranch(@P^.Branch);
 1:if b1^.Chain<>nil then
     if b1^.Chain=B then begin
       b1^.Chain:=B^.Chain; while (Q<>nil) do begin
         if Q^.NextBranch=pointer(b) then Q^.NextBranch:=pointer(b^.Chain);
         Q:=Q^.PrevInst end end
     else begin b1:=b1^.Chain; goto 1 end;
-  Mem3.Free(B,LenDbEntry(LongStrPtr(@B^.LL),P^.Arity)+4);
+  Mem3.Free(B,LenDbEntry(LongStrPtr(@B^.LL),P^.Arity)+sizeof(pointer));
 end;
 procedure AppendPackedTerm(C:PCommand);
 var pt:Pchar absolute PackedTermPtr; b:PDbBranch;
     A:array[1..MaxPackedPredLen] of char; n:word absolute A;
 begin
-  pt:=@A[3]; PTPMaxOfs:=ofs(A)+MaxPackedPredLen-2;
-  PackTermV(C^.apTerm); n:=PtrRec(pt).Ofs-ofs(A);
-  b:=Mem3.Alloc(4+n); move(A,b^.LL,n); ChainLast(CurrInst^.Vars[C^.apIdx],b);
+  pt:=@A[3]; PTPMaxOfs:=AdrOfs(@A)+MaxPackedPredLen-2;
+  PackTermV(C^.apTerm); n:=AdrOfs(pt)-AdrOfs(@A);
+  b:=Mem3.Alloc(sizeof(pointer)+n); move(A,b^.LL,n); ChainLast(CurrInst^.Vars[C^.apIdx],b);
 end;
 procedure UnpackAppendedTerms(C:PCommand);
 var b,b1:PDbBranch; t:PTerm; pt:^PTerm;
@@ -925,7 +974,7 @@ begin
   pt:=@CurrInst^.Vars[C^.apIdx]; b:=PDbBranch(pt^); pt^:=nil;
   while b<>nil do begin
     PackedTermPtr:=@b^.A; t:=UnpackTerm(c^.apDom); ChainList(pt^,t);
-    b1:=b; b:=b^.Chain; Mem3.Free(b1,b1^.LL+4) end;
+    b1:=b; b:=b^.Chain; Mem3.Free(b1,b1^.LL+sizeof(pointer)) end;
 end;
 function RunCommand(COff:word{PCommand}):boolean;
 var i1,i2:integer; r1,r2:float; res:char; i:word; t:PTerm;
@@ -933,10 +982,10 @@ var i1,i2:integer; r1,r2:float; res:char; i:word; t:PTerm;
     p1:pointer; n:longint; s:LongStrPtr; md:LockMode;
 label 1;
 begin
-  c:=ptr(_Sg,COff);
+  c:=SgPtr(COff);
   case c^.Code of
     _WriteC: begin
-             w:=ptr(_Sg,c^.WrD); while wofs<>0 do begin
+             w:=SgPtr(c^.WrD); while wofs<>0 do begin
              if w^.IsString then write(w^.SS) else PrintTerm(CurrInst^.Vars[w^.Idx],w^.Dom);
              wofs:=w^.Chain end;
              if c^.NL then writeln end;
@@ -954,7 +1003,8 @@ begin
              end end;
     _SaveC,_ConsultC,_LoadLexC: begin MarkStore(p1);
             CFile:=c^.FD; if CFile=nil then begin
-              SetCFile(c^.Name); c^.FD:=CFile; PtrRec(c^.FldD).Seg:=PtrRec(CFile).Seg end;
+              SetCFile(c^.Name); c^.FD:=CFile;
+              {$ifndef FPC}PtrRec(c^.FldD).Seg:=PtrRec(CFile).Seg{$endif} end;
             if c^.Code=_SaveC then begin
               md:=NewLMode(WrMode); if not LinkLastRec(CFile,n,true) then IncNRecs(1);
               DelTFld(c^.FldD); s:=SaveDb(c^.DbPred,0); longs_(c^.FldD,s);
@@ -963,10 +1013,10 @@ begin
               md:=NewLMode(RdMode); LinkLastRec(CFile,n,true); s:=_longs(c^.FldD);
               if c^.Code=_ConsultC then ConsultDb(s,c^.DbPred) else LoadLex(s) end;
             OldLMode(md); ReleaseStore(p1) end;
-   _ErrorC: begin i1:=-1; i:=1; w:=ptr(_Sg,c^.WrD); while wofs<>0 do begin
+   _ErrorC: begin i1:=-1; i:=1; w:=SgPtr(c^.WrD); while wofs<>0 do begin
              if w^.IsString then begin MsgPar[i]:=w^.SS; inc(i) end
              else begin t:=CurrInst^.Vars[w^.Idx];
-               if PDomain(ptr(_Sg,w^.Dom))^.Typ=_IntD then i1:=t^.II
+               if PDomain(SgPtr(w^.Dom))^.Typ=_IntD then i1:=t^.II
                else begin MsgPar[i]:=t^.SS; inc(i) end end;
              wofs:=w^.Chain end;
             if i1=-1 then begin
@@ -983,13 +1033,14 @@ var p:PPredicate; pd:InstrPtr; oldBP,ps:ProcStkPtr; i,n,w:word; t:PTerm;
     pp:Pchar absolute ps; s:LongStrPtr; d:PDomain; dofs:word absolute d;
     pt:pointer absolute PackedTermPtr; ss:StringPtr;
 begin
-  p:=ptr(_Sg,CurrInst^.Pred); PtrRec(d).Seg:=_Sg;
-  pd:=ptr(_Sg,word(p^.Branch)); ps:=GetZStore(p^.LocVarSz);
-  w:=p^.InpMask; if PtrRec(pd^.Pos.R).Seg=0 then begin
-    PtrRec(pd^.Pos.R).Seg:=_Sg; if pd^.Pos.IRec=$ffff then
+  p:=SgPtr(CurrInst^.Pred); SgFix(d);
+  pd:=SgPtr(word(p^.Branch)); ps:=GetZStore(p^.LocVarSz);
+  w:=p^.InpMask;
+  if {$ifdef FPC}PtrUInt(pd^.Pos.R)<$10000{$else}PtrRec(pd^.Pos.R).Seg=0{$endif} then begin
+    SgFix(pd^.Pos.R); if pd^.Pos.IRec=$ffff then
     if not FindChpt('P',StringPtr(pd^.Pos.R)^,false,pd^.Pos) then RunError(1037) end;
   for i:=1 to p^.Arity do with pd^.TArg[i] do begin
-    PtrRec(Frml).Seg:=_Sg; dofs:=p^.Arg[i-1];
+    SgFix(Frml); dofs:=p^.Arg[i-1];
     t:=CurrInst^.Vars[i-1]; if (w and 1)<>0 then begin
       case FTyp of
         'R':if t^.Fun=_IntT then Frml^.R:=t^.II else Frml^.R:=t^.RR;
@@ -1012,7 +1063,8 @@ begin
             if d^.Typ=_LongStrD then Vars[i-1]:=GetLongStrTerm(WrLongStr(s))
             else begin PackedTermPtr:=@s^.A; Vars[i-1]:=UnpackTerm(dofs) end;
             ReleaseStore(s) end;
-          TWork.Delete(LongintPtr(Ptr(Seg(MyBP^),Ofs(MyBP^)+Frml^.BPOfs))^) end;
+          TWork.Delete(LongintPtr({$ifdef FPC}pointer(PtrUInt(MyBP)+Frml^.BPOfs){$else}Ptr(Seg(MyBP^),
+            Ofs(MyBP^)+Frml^.BPOfs){$endif})^) end;
       'R':if d^.Typ=_IntD then Vars[i-1]:=GetIntTerm(RunInt(Frml))
           else Vars[i-1]:=GetRealTerm(RunReal(Frml));
       else Vars[i-1]:=GetBoolTerm(RunBool(Frml)) end;
@@ -1022,10 +1074,10 @@ end;
 function SiCFile(SiOfs:word):PScanInf;
 var si:PScanInf; fl:PFldList; flofs:word absolute fl;
 begin
-  si:=ptr(_sg,SiOfs); SiCFile:=si; CFile:=si^.FD; if CFile<>nil then exit;
-  SetCFile(si^.Name); si^.FD:=CFile; fl:=ptr(_sg,si^.FL);
+  si:=SgPtr(SiOfs); SiCFile:=si; CFile:=si^.FD; if CFile<>nil then exit;
+  SetCFile(si^.Name); si^.FD:=CFile; fl:=SgPtr(si^.FL);
   while flofs<>0 do begin
-    PtrRec(fl^.FldD).Seg:=PtrRec(CFile).Seg; flofs:=fl^.Chain end;
+    {$ifndef FPC}PtrRec(fl^.FldD).Seg:=PtrRec(CFile).Seg;{$endif} flofs:=fl^.Chain end;
 end;
 procedure AssertFand(P:PPredicate;C:PCommand);
 var fl:PFldList; flofs:word absolute fl; l:PTermList; lofs:word absolute l;
@@ -1034,8 +1086,8 @@ var fl:PFldList; flofs:word absolute fl; l:PTermList; lofs:word absolute l;
 begin
   si:=SiCFile(word(P^.Branch));
   md:=NewLMode(CrMode); CRecPtr:=GetRecSpace; ZeroAllFlds;
-  PtrRec(d).Seg:=_Sg; fl:=ptr(_Sg,si^.FL); l:=ptr(_Sg,c^.Arg); i:=0;
-  if trace then write('CALL assert(',PString(ptr(_Sg,P^.Name))^,'(');
+  SgFix(d); fl:=SgPtr(si^.FL); l:=SgPtr(c^.Arg); i:=0;
+  if trace then write('CALL assert(',PString(SgPtr(P^.Name))^,'(');
   while flofs<>0 do begin
     f:=fl^.FldD; if f^.Flg and f_Stored<>0 then begin
     t:=CopyTerm(l^.Elem); dofs:=p^.Arg[i];
@@ -1063,7 +1115,8 @@ var fs:PFileScan; si:PScanInf; fl:PFldList; flofs:word absolute fl;
 label 1;
 begin
   si:=SiCFile(SIOfs); fs:=Mem1.Get(sizeof(TFileScan)); md:=NewLMode(RdMode);
-  k:=nil; if c^.KDOfs<>0 then k:=ptr(PtrRec(CFile).Seg,c^.KDOfs);
+  {$ifdef FPC}k:=c^.KDOfs;{$else}
+  k:=nil; if c^.KDOfs<>0 then k:=ptr(PtrRec(CFile).Seg,c^.KDOfs);{$endif}
   if kofs=0 then begin
     fs^.IRec:=1; fs^.Count:=CFile^.NRecs; goto 1 end;
   TestXFExist; xx.Clear; i:=0;
@@ -1076,7 +1129,8 @@ begin
      else if t^.Fun=_StrT then xx.StoreStr(t^.SS,kf)
      else begin
        if t^.Fun=_LongStrT then s:=RdLongStr(t^.Pos) else s:=GetPackedTerm(t);
-       ss:=ptr(PtrRec(s).Seg,PtrRec(s).Ofs+1); ss^[0]:=char(minw(s^.LL,255));
+       ss:={$ifdef FPC}PString(PtrUInt(s)+1){$else}ptr(PtrRec(s).Seg,PtrRec(s).Ofs+1){$endif};
+       ss^[0]:=char(minw(s^.LL,255));
        xx.StoreStr(ss^,kf); ReleaseStore(s) end end;
     kf:=kf^.Chain; inc(i) end;
   k^.FindNr(xx,fs^.IRec);
@@ -1106,10 +1160,11 @@ label 1,2;
 begin
   ScanFile:=false;
   fs:=PFileScan(CurrInst^.NextBranch); if fs= nil then exit;
-  p:=ptr(_Sg,CurrInst^.Pred); c:=ptr(_Sg,CurrInst^.RetCmd); PtrRec(d).Seg:=_Sg;
-  si:=ptr(_Sg,word(p^.Branch)); PtrRec(fl).Seg:=_Sg;
+  p:=SgPtr(CurrInst^.Pred); c:=SgPtr(CurrInst^.RetCmd); SgFix(d);
+  si:=SgPtr(word(p^.Branch)); SgFix(fl);
   CFile:=si^.FD; CRecPtr:=GetRecSpace; md:=NewLMode(RdMode);
-  k:=nil; if c^.KDOfs<>0 then k:=ptr(PtrRec(CFile).Seg,c^.KDOfs);
+  {$ifdef FPC}k:=c^.KDOfs;{$else}
+  k:=nil; if c^.KDOfs<>0 then k:=ptr(PtrRec(CFile).Seg,c^.KDOfs);{$endif}
 1:if k=nil then begin
     repeat RecNr:=fs^.IRec; if RecNr>CFile^.NRecs then begin
         CurrInst^.NextBranch:=nil; goto 2 end;
@@ -1157,8 +1212,10 @@ begin
     while (q<>nil) do begin
       fs1:=PFileScan(q^.NextBranch);
       if (q^.Pred=pofs) and (fs1<>nil) then
-        if CFile^.Typ='X' then begin cofs:=q^.RetCmd; kofs:=c^.KDOfs;
-          if kofs<>0 then begin
+        if CFile^.Typ='X' then begin cofs:=q^.RetCmd;
+          { that scan's key, as BP7's kofs:=c^.KDOfs }
+          {$ifdef FPC}k:=c^.KDOfs;{$else}kofs:=c^.KDOfs;{$endif}
+          if c^.KDOfs<>{$ifdef FPC}nil{$else}0{$endif} then begin
             xx.PackKF(k^.KFlds); k^.RecNrToPath(xx,RecNr);
             if k^.PathToNr<=fs1^.IRec then dec(fs1^.IRec) end end
         else if RecNr<=fs1^.IRec then dec(fs1^.IRec);
@@ -1177,12 +1234,12 @@ procedure SetOldLMode; far;
 procedure TraceCall(Q:PInstance;X:byte);
 var i,w:word; p:PPredicate; c:PCommand; d:PDomain; dofs:word absolute d;
 begin
-  p:=ptr(_Sg,Q^.Pred); c:=ptr(_Sg,Q^.RetCmd); PtrRec(d).Seg:=_Sg;
+  p:=SgPtr(Q^.Pred); c:=SgPtr(Q^.RetCmd); SgFix(d);
   if X=1 then write('CALL ') else
   if c^.Code=_AllC then write('MEMBER ') else write('RETURN ');
   case c^.Code of _RetractC:write('retract('); _NotC:write('not(');
                   _AllC:write('all_XX(') end;
-  write(PString(ptr(_Sg,p^.Name))^); if p^.Arity>0 then begin
+  write(PString(SgPtr(p^.Name))^); if p^.Arity>0 then begin
     write('(');
     if (p^.Opt and _CioMaskOpt)<>0 then w:=c^.InpMask else w:=p^.InpMask;
     for i:=0 to p^.Arity-1 do begin if i>0 then write(','); dofs:=p^.Arg[i];
@@ -1213,7 +1270,7 @@ var i,j,i2,iOutp,sz,arity:integer; w:PAutoR; t,t1:PTerm; f:PFunDcl;
     d:PDomain; dofs:word absolute d;
 label 1,2,3;
 begin
-  d:=ptr(_Sg,p^.Arg[0]); iOutp:=c^.iOutp; t1:=q^.Vars[c^.iWrk];
+  d:=SgPtr(p^.Arg[0]); iOutp:=c^.iOutp; t1:=q^.Vars[c^.iWrk];
 
   if d^.Typ=_ListD then
     if t1=nil then begin
@@ -1229,7 +1286,7 @@ begin
   w:=PAutoR(t1);
   if w=nil then begin
     t:=q^.Vars[0]; f:=getFunDcl(dofs,t^.Fun);
-    w:=Mem2.get(sizeof(TAutoR)+4*f^.Arity);
+    w:=Mem2.get(sizeof(TAutoR)+sizeof(PTerm)*f^.Arity);
     w^.t:=t; i:=0; q^.Vars[c^.iWrk]:=PTerm(w) end
   else begin t:=w^.t; f:=getFunDcl(dofs,t^.Fun); i:=w^.i;
     if iOutp>0 then w^.Arg[i]:=q^.Vars[iOutp]; inc(i) end;
@@ -1240,7 +1297,7 @@ begin
       q^.Vars[0]:=t^.Arg[i]; w^.i:=i; w^.wasCall:=true;
 1:    AutoRecursion:=true; exit end
     else begin if iOutp>0 then w^.Arg[i]:=t^.Arg[i]; inc(i) end;
-  if iOutp>0 then begin sz:=4*f^.Arity;
+  if iOutp>0 then begin sz:=sizeof(PTerm)*f^.Arity;
     if not EquArea(@t^.Arg,@w^.Arg,sz) then begin
       t1:=GetFunTerm(t^.Fun,f^.Arity); move(w^.Arg,t1^.Arg,sz);
       q^.Vars[iOutp]:=t1 end
@@ -1266,11 +1323,16 @@ var q,q1,TopInst:PInstance; b1:PDbBranch;
     b:PBranch; bofs:word absolute b; bd:PDbBranch absolute b;
     l:PTermList; lofs:word absolute l;  db:PDatabase; dbofs:word absolute db;
     t:PTerm; Roots:PProgRoots; ChptLRdb:RdbDPtr;
-    oldSg:word; oldCurrInst:PInstance; tl,cl:word; er:ExitRecord;
+    oldSg,oldSgMark:word; oldCurrInst:PInstance; tl,cl:word; er:ExitRecord;
 label 1,2,21,22,23,24,25,3,4,41,5,6,7,8;
 begin
-  inc(ProlgCallLevel); NewExit(Ovr,er); goto 7; LastExitCode:=1;
-  oldSg:=_Sg; oldCurrInst:=CurrInst; ForallFDs(SaveLMode); WMark:=MaxWSize;
+  inc(ProlgCallLevel); {$ifdef FPC}Move(ExitBuf,er,sizeof(ExitRecord)); ExitBuf.OvrEx:=Ovr; ExitBuf.ExP:=ExitP;
+    ExitBuf.BrkP:=BreakP; ExitBuf.mBP:=MyBP; if SetJmp(ExitBuf.JmpBuf)<>0 then begin GoExitFired:=true; goto 7 end else
+    GoExitFired:=false; KeepInMemory([@q,@q1,@TopInst,@b1,@w,@n,@i,@s,@wp,@pp,@pp1,@pp2,@pp3,@pm1,@pm2,@ss,@WMark,@p,
+    @p1,@c,@b,@l,@db,@t,@Roots,@ChptLRdb,@oldSg,@oldSgMark,@oldCurrInst,@tl,@cl]);{$else}NewExit(Ovr,er); goto
+    7;{$endif} LastExitCode:=1;
+  oldSg:=_Sg; oldSgMark:=SgMark;
+  oldCurrInst:=CurrInst; ForallFDs(SaveLMode); WMark:=MaxWSize;
   if ProlgCallLevel=1 then begin
     MarkBoth(pm1,pm2); FreeMemList:=nil; Mem1.Init; Mem2.Init; Mem3.Init;
     TrcLevel:=0; CallLevel:=0 end
@@ -1282,32 +1344,46 @@ begin
     ChptLRdb:=CRdb end
   else begin
     ChptLRdb:=Pos.R; CFile:=ChptLRdb^.FD; CRecPtr:=GetRecSpace;
-    ReadRec(Pos.IRec); AlignLongStr;
+    ReadRec(Pos.IRec);
+    {$ifdef FPC}
+    { the text in the store released at the end: below level 1 nothing
+      releases Store2, where SetInpTTPos reads it - 64 kB per call/2 }
+    ss:=CFile^.TF^.Read(1,_t(ChptTxt));
+    if ChptLRdb^.Encrypted then CodingLongStr(ss);
+    InpArrLen:=ss^.LL; InpArrPtr:=CharArrPtr(@ss^.A);
+    if InpArrLen=0 then ForwChar:=^z else ForwChar:=InpArrPtr^[1];
+    CurrPos:=1;
+    _Sg:=ReadProlog(0) end;
+    {$else}
+    AlignLongStr;
     _Sg:=PtrRec(HeapPtr).Seg+1; ss:=_longs(ChptOldTxt);
     if ChptLRdb^.Encrypted then CodingLongStr(ss) end;
-  Roots:=ptr(_Sg,0);
+    {$endif}
+  Roots:=SgPtr(0);
 
-  db:=ptr(_Sg,Roots^.Databases); while dbofs<>0 do begin
-    ConsultDb(ptr(_Sg,db^.SOfs),dbofs); dbofs:=db^.Chain end;
+  db:=SgPtr(Roots^.Databases); while dbofs<>0 do begin
+    ConsultDb(SgPtr(db^.SOfs),dbofs); dbofs:=db^.Chain end;
   TopInst:=nil; CurrInst:=nil;
-  c:=ptr(_Sg,0); b:=ptr(_Sg,0); l:=ptr(_Sg,0);
-  p:=ptr(_Sg,Roots^.Predicates); { main } if PredName<>nil then begin
-    while (pofs<>0) and (StringPtr(ptr(_Sg,p^.Name))^<>PredName^) do pofs:=p^.Chain;
+  c:=SgPtr(0); b:=SgPtr(0); l:=SgPtr(0);
+  p:=SgPtr(Roots^.Predicates); { main } if PredName<>nil then begin
+    while (pofs<>0) and (StringPtr(SgPtr(p^.Name))^<>PredName^) do pofs:=p^.Chain;
     if (pofs=0) or (p^.Arity<>0) then begin
       Set2MsgPar(Pos.R^.FD^.Name,PredName^); RunError(1545) end end;
 1:                {    new instance        remember prev. inst,branch,cmd }
-  q:=Mem2.Get(p^.InstSz+(sizeof(TInstance)-7*4)); q^.Pred:=pofs;
+  q:=Mem2.Get(p^.InstSz+(sizeof(TInstance)-7*sizeof(pointer))); q^.Pred:=pofs;
   q^.PrevInst:=TopInst; TopInst:=q;
   q^.RetInst:=CurrInst; q^.RetBranch:=bofs; q^.RetCmd:=cofs;
   if TrcLevel<>0 then begin
+    { a nested lproc/call starts with no instance: one below its caller }
+    {$ifdef FPC}if CurrInst=nil then inc(CallLevel) else{$endif}
     CallLevel:=CurrInst^.CallLevel+1; q^.CallLevel:=CallLevel end;
 				{          copy input parameters  }
   b:=p^.Branch; i:=0;
   if (p^.Opt and _CioMaskOpt)<>0 then w:=c^.InpMask else w:=p^.InpMask;
   while lofs<>0 do begin
     if (w and 1)<>0 then if (p^.Opt and _PackInpOpt)<>0 then begin
-      pt:=Pchar(@A); PTPMaxOfs:=ofs(A)+MaxPackedPredLen-2;
-      PackTermV(l^.Elem); n:=PtrRec(pt).Ofs-ofs(A);
+      pt:=Pchar(@A); PTPMaxOfs:=AdrOfs(@A)+MaxPackedPredLen-2;
+      PackTermV(l^.Elem); n:=AdrOfs(pt)-AdrOfs(@A);
       s:=Mem1.Get(2+n); q^.Vars[i]:=PTerm(s); s^.LL:=n; move(A,s^.A,n) end
     else q^.Vars[i]:=CopyTerm(l^.Elem);
     inc(i); lofs:=l^.Chain; w:=w shr 1 end;
@@ -1329,14 +1405,14 @@ begin
       if ((w and 1)<>0) and not EquLongStr(LongStrPtr(q^.Vars[i]),s) then begin
         bd:=bd^.Chain; if bd=nil then begin q^.NextBranch:=nil; goto 5 end;
         goto 21 end;
-      inc(PtrRec(s).Ofs,s^.LL+2); w:=w shr 1 end;
+      {$ifdef FPC}s:=LongStrPtr(PtrUInt(s)+s^.LL+2){$else}inc(PtrRec(s).Ofs,s^.LL+2){$endif}; w:=w shr 1 end;
 22: q^.NextBranch:=PBranch(bd^.Chain); s:=LongStrPtr(@bd^.LL); w:=c^.OutpMask;
     for i:=0 to integer(p^.Arity)-1 do begin     { unpack db outp.parameters }
       if (w and 1)<>0 then begin pt:=Pchar(@s^.A); q^.Vars[i]:=UnpackTerm(p^.Arg[i]) end;
-      inc(PtrRec(s).Ofs,s^.LL+2); w:=w shr 1 end;
+      {$ifdef FPC}s:=LongStrPtr(PtrUInt(s)+s^.LL+2){$else}inc(PtrRec(s).Ofs,s^.LL+2){$endif}; w:=w shr 1 end;
     if c^.Code=_RetractC then RetractDbEntry(TopInst,pofs,bd);
     goto 4 end;
-  PtrRec(b).Seg:=_Sg;
+  SgFix(b);
 23:                                { normal predicates : unify branch head }
   word(q^.NextBranch):=b^.Chain;
   i:=0; lofs:=b^.Head; w:=b^.HeadIMask; while lofs<>0 do begin
@@ -1356,13 +1432,13 @@ begin
               if TrcLevel<>0 then begin
                 inc(TrcLevel); CallLevel:=1; q^.CallLevel:=1 end
               else begin CallLevel:=0; q^.CallLevel:=0 end end;
-      _AssertC: begin p1:=ptr(_Sg,c^.Pred);
+      _AssertC: begin p1:=SgPtr(c^.Pred);
               if p1^.Opt and _FandCallOpt<>0 then AssertFand(p1,c) else begin
-              lofs:=c^.Arg; pt:=Pchar(@A); PTPMaxOfs:=ofs(A)+MaxPackedPredLen-2;
+              lofs:=c^.Arg; pt:=Pchar(@A); PTPMaxOfs:=AdrOfs(@A)+MaxPackedPredLen-2;
               while lofs<>0 do begin
                 wp:=WordPtr(pt); inc(pt,2); PackTermV(l^.Elem);
-                wp^:=PtrRec(pt).Ofs-PtrRec(wp).Ofs-2; lofs:=l^.Chain end;
-              n:=PtrRec(pt).Ofs-Ofs(A); b1:=Mem3.Alloc(4+n); move(A,b1^.LL,n);
+                wp^:=AdrOfs(pt)-AdrOfs(wp)-2; lofs:=l^.Chain end;
+              n:=AdrOfs(pt)-AdrOfs(@A); b1:=Mem3.Alloc(sizeof(pointer)+n); move(A,b1^.LL,n);
               ChainLast(p1^.Branch,b1);
               if Trace then PrintPackedPred(Pchar(@A),c^.Pred) end end;
       _AutoC:
@@ -1385,7 +1461,7 @@ begin
    if c^.Code=_NotC then begin TopInst:=q^.PrevInst; goto 5 end;
 41:if Trace then TraceCall(q,0);
 				    {      unify output with caller terms }
-  b:=ptr(_Sg,q^.RetBranch); pofs:=q^.Pred; q1:=q; q:=q^.RetInst;
+  b:=SgPtr(q^.RetBranch); pofs:=q^.Pred; q1:=q; q:=q^.RetInst;
   if q=nil then begin EdBreak:=0; LastExitCode:=0; goto 8 end;
   CurrInst:=q;
   if (p^.Opt and _CioMaskOpt)<>0 then w:=c^.OutpMask else w:=not p^.InpMask;
@@ -1406,14 +1482,14 @@ begin
 {---------------------------------  backtracking  ---------------------------}
 5: q1:=nil; q:=TopInst;
   while (q<>nil) and (q^.NextBranch=nil) and
-    not (PCommand(ptr(_Sg,q^.RetCmd))^.Code in [_NotC,_AllC]) do
+    not (PCommand(SgPtr(q^.RetCmd))^.Code in [_NotC,_AllC]) do
     begin q1:=q; q:=q^.PrevInst end;
   if q=nil then begin
     if Trace then begin writeln('FAIL');waitC end;
     EdBreak:=1; LastExitCode:=0; goto 8 end;
   Mem1.Release(q^.StkMark); MaxWSize:=q^.WMark;
   if q^.NextBranch=nil then begin
-    q1:=q; q:=q1^.RetInst; b:=ptr(_Sg,q1^.RetBranch); cofs:=q1^.RetCmd;
+    q1:=q; q:=q1^.RetInst; b:=SgPtr(q1^.RetBranch); cofs:=q1^.RetCmd;
     CurrInst:=q; TopInst:=q1^.PrevInst; Mem2.Release(q1);
     if c^.Code=_NotC then begin
       if Trace then begin writeln('FAIL'^m^j'RETURN not()'); waitC end end
@@ -1426,14 +1502,14 @@ begin
   TopInst:=q; CurrInst:=TopInst; b:=q^.NextBranch; pofs:=q^.Pred;
   SetCallLevel(q^.CallLevel);
   if q1<>nil then Mem2.Release(q1);
-6:if Trace then begin writeln('REDO ',PString(ptr(_Sg,p^.Name))^);waitC end;
+6:if Trace then begin writeln('REDO ',PString(SgPtr(p^.Name))^);waitC end;
   goto 2;
 
 {--------------------------   end of program  ------------------------------}
 7:EdBreak:=2;
 8:RestoreExit(er);
-{writeln(AbsAdr(HeapPtr)-AbsAdr(pm1),'/',AbsAdr(pm2)-AbsAdr(Stack2Ptr)); }
-  _Sg:=oldSg; CurrInst:=oldCurrInst; ForallFDs(SetOldLMode); MaxWSize:=WMark;
+  _Sg:=oldSg; SgRelease(oldSgMark);
+  CurrInst:=oldCurrInst; ForallFDs(SetOldLMode); MaxWSize:=WMark;
   if ProlgCallLevel=1 then ReleaseBoth(pm1,pm2) else begin
     ReleaseStore(pp); Mem1.Release(pp1); Mem2.Release(pp2); Mem3.Release(pp3);
     TrcLevel:=tl; CallLevel:=cl end;

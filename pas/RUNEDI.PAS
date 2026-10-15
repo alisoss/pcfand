@@ -50,10 +50,12 @@ uses obaseww,oaccess,runfrml,rdfildcl,sort,genrprt,runproc,runproj
 
 
 procedure Ovr; far;
+{$ifdef FPC}begin end;{$else}
 assembler;
 asm   pop ax; pop ax; pop ax{bp}; push ax; push ax; call StackOvr;
       pop bp; pop ds; pop ax; pop dx; pop sp; push cs; push ax;
 end;
+{$endif}
 
 var E: EditDPtr absolute EditDRoot;
 

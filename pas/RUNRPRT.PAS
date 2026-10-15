@@ -15,10 +15,12 @@ uses dos,drivers,base,obase,obaseww,access,oaccess,
      runfrml,wwmix,sort;
 
 procedure Ovr; far;
+{$ifdef FPC}begin end;{$else}
 assembler;
 asm   pop ax; pop ax; pop ax{bp}; push ax; push ax; call StackOvr;
       pop bp; pop ds; pop ax; pop dx; pop sp; push cs; push ax;
 end;
+{$endif}
 
 
 type TTDPtr=^TTD;
@@ -108,7 +110,7 @@ begin
           w:=wWrdEnd; nWords:=nWrdEnd; Fill:=true; Absatz:=false end;
   if (i<TLen) and (T^[i]=^m) then
       begin inc(i);  if (i<TLen) and (T^[i]=^j) then inc(i) end;
-  inc(TAOff,i); dec(TLen,i);
+  {$ifdef FPC}TA:=pointer(PtrUInt(TA)+i){$else}inc(TAOff,i){$endif}; dec(TLen,i);
   l2:=i2; if w<Width then inc(l2, Width-w); n:=l2-i2;
   if (nWords<=1) or (n=0) or not Fill then
     begin FillChar(s[i2+1],n,' '); s[0]:=char(l2) end
@@ -138,7 +140,7 @@ begin
     if Ln=1 then begin
       TD:=GetStore2(sizeof(TD^));TD^.SL:=nil;
       TD^.Col:=Col; TD^.Width:=Width end;
-    SL:=GetStore2(length(ss)+5); SL^.S:=ss;
+    SL:=GetStore2(length(ss)+1+sizeof(StringList)); SL^.S:=ss;
     ChainLast(TD^.SL,SL) end;
   if Ln>0 then begin
     TD^.Ln:=Ln; ChainLast(Y.TD,TD); if Ln>Y.TLn then Y.TLn:=Ln end;
@@ -448,12 +450,12 @@ end end end end;
 function RewriteRprt(RO:RprtOptPtr;Pl:word; var Times:word;var IsLPT1:boolean):boolean;
   var PrintCtrl:boolean;
   begin PrintView:=false;WasLPTCancel:=false;IsLPT1:=false;RewriteRprt:=false;
-     Times:=1;PrintCtrl:=RO^.PrintCtrl;
+     Times:=1;PrintCtrl:={$ifdef FPC}(RO<>nil) and{$endif} RO^.PrintCtrl;
      if (RO<>nil) and (RO^.Times<>nil) then Times:=RunInt(RO^.Times);
      if (RO=nil) or (RO^.Path=nil)and(RO^.CatIRec=0) then
         begin SetPrintTxtPath;PrintView:=true;PrintCtrl:=false end
      else begin
-        if SEquUpcase(RO^.Path^,'LPT1') then
+        if {$ifdef FPC}(RO^.Path<>nil) and{$endif} SEquUpcase(RO^.Path^,'LPT1') then
            begin CPath:='LPT1'; CVol:=''; IsLPT1:=true;
                  RewriteRprt:=ResetPrinter(Pl,0,true,true) and RewriteTxt(Rprt,false);
                  exit end;
@@ -481,7 +483,10 @@ begin
   if (PgeLimit>PgeSize) or (PgeLimit=0) then PgeLimit:=PgeSize-1;
   if not RewriteRprt(RO,PgeSize,Times,isLPT1) then exit;
   MarkStore2(Store2Ptr); ex:=true;
-  PushProcStk; NewExit(Ovr,er); goto 3;
+  PushProcStk; {$ifdef FPC}Move(ExitBuf,er,sizeof(ExitRecord)); ExitBuf.OvrEx:=Ovr; ExitBuf.ExP:=ExitP;
+    ExitBuf.BrkP:=BreakP; ExitBuf.mBP:=MyBP; if SetJmp(ExitBuf.JmpBuf)<>0 then begin GoExitFired:=true; goto 3 end else
+    GoExitFired:=false; KeepInMemory([@L,@s,@i,@frst,@isLPT1,@Times,@ex,@b,@BD,@RFb,@md]);{$else}NewExit(Ovr,er); goto
+    3;{$endif}
   OpenInp;
   MergOpGroup.Group:=1.0; frst:=true; NLinesOutp:=0; PrintDH:=2;
 0:RunMsgOn('R',NRecsAll); RecCount:=0;

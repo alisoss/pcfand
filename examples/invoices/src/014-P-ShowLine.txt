@@ -1,0 +1,5 @@
+{ one line of the unpaid invoices; the Prolog chapter Unpaid calls it }
+(n:real; c:string; m:string; t:real)
+begin
+  writeln(n:6:0,'  ',c,'  ',m,'  ',t:10:2);
+end;

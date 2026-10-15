@@ -145,7 +145,7 @@ procedure TestCFileError;
 procedure TestCPathError;
 var n:word;
 begin if HandleError<>0 then begin
-  n:=700+HandleError; if (n=705) and (CPath[length(CPath)]='\') then n:=840;
+  n:=700+HandleError; if (n=705) and (CPath[length(CPath)]={$ifdef FPC}DirectorySeparator{$else}'\'{$endif}) then n:=840;
   SetMsgPar(CPath); RunError(n);
 end end;
 
@@ -160,7 +160,7 @@ type
     Rsrvd1, CompileProc, CompileAll:boolean;
     IRec:word;
     FreeRoot, MaxPage:longint;   {eldest version=>Pw:array[1..40] of char;}
-    TimeStmp:real; HasCoproc:boolean; Rsrvd2:array[1..25]of char;
+    TimeStmp:{$ifdef FPC}array[1..6] of byte{$else}real{$endif}; HasCoproc:boolean; Rsrvd2:array[1..25]of char;
     Version:array[1..4]of char;
     LicText:array[1..105] of byte; Sum:byte;
     X1:array[1..295] of char;
@@ -199,11 +199,22 @@ var
   TNxtAvailPage:longint absolute T;                               { .DBT }
   FptHd:record FreePart:longint; X,BlockSize:word end absolute T; { .FPT }
   sum:byte; FS,ML,RS:longint; i,n:word;
+  {$ifdef FPC} T0:TT1Page; NewPw:boolean; SRS:longint;
+  function Plausible:boolean;   { stored passwords: characters, then '@' }
+  var h,j,k:integer;
+  begin
+    Plausible:=false;
+    for h:=ord(LicenseNr<>0) to 1 do begin
+      j:=20; while (j>0) and (PwCode[h*20+j]='@') do dec(j);
+      for k:=1 to j do if PwCode[h*20+k]<' ' then exit end;
+    Plausible:=true;
+  end; {$endif}
 label 1;
 begin
   if Chk then begin FS:=FileSizeH(Handle); if FS<=512 then begin
     FillChar(PwCode,40,'@'); Code(PwCode,40); SetEmpty; exit end end;
   RdWrCache(true,Handle,NotCached,0,512,T); RS:=RandSeed; LicenseNr:=0;
+  {$ifdef FPC} T0:=T; {$endif}
   if Format=DbtFormat then begin
     MaxPage:=TNxtAvailPage-1; GetMLen; exit end;
   if Format=FptFormat then begin
@@ -223,12 +234,24 @@ begin
   if IRec>=$6000 then begin IRec:= IRec-$2000;
     if not IsWork and (CFile^.Typ='0') then LicenseNr:=T.LicNr end;
   if IRec>=$4000 then begin
-    IRec:=IRec-$4000;
+    IRec:=IRec-$4000; {$ifdef FPC}NewPw:=true;{$endif}
     RandSeed:=ML+T.Time;
     for i:=14 to 511 do TX[i]:=TX[i] xor Random(255);
     Move(T.PwNew,PwCode,40) end
-  else begin RandSeed:=ML; for i:=14 to 53 do TX[i]:=TX[i] xor Random(255);
+  else begin {$ifdef FPC}NewPw:=false;{$endif}
+    RandSeed:=ML; for i:=14 to 53 do TX[i]:=TX[i] xor Random(255);
     Move(T.FreeRoot{Pw},PwCode,40) end;
+{$ifdef FPC}
+  if not Plausible then begin   { written by an earlier port with FPC's generator }
+    T:=T0; SRS:=System.RandSeed;
+    if NewPw then begin System.RandSeed:=ML+T.Time;
+      for i:=14 to 511 do TX[i]:=TX[i] xor System.Random(255);
+      Move(T.PwNew,PwCode,40) end
+    else begin System.RandSeed:=ML;
+      for i:=14 to 53 do TX[i]:=TX[i] xor System.Random(255);
+      Move(T.FreeRoot{Pw},PwCode,40) end;
+    System.RandSeed:=SRS end;
+{$endif}
   Code(PwCode,40);
   if (FreePart<MPageSize) or (FreePart>ML) or (FS<ML) or
      (FreeRoot>MaxPage) or (MaxPage=0) then begin
@@ -244,7 +267,8 @@ var
   TX:array[1..512] of byte absolute T;
   TNxtAvailPage:longint absolute T;                               { .DBT }
   FptHd:record FreePart:longint; X,BlockSize:word end absolute T; { .FPT }
-  Pw:array[1..40]of char;  Time:byte absolute 0:$46C;
+  Pw:array[1..40]of char;
+  {$ifdef FPC}Time:byte;{$else}Time:byte absolute 0:$46C;{$endif}
   i,n:word; sum:byte; RS:longint;
 const EmptyPw:PwCodeArr='@@@@@@@@@@@@@@@@@@@@';
 label 1;
@@ -318,20 +342,20 @@ procedure TFile.Delete(Pos:longint);
 var
   PosPg,NxtPg:longint; PosI:word; N:integer; l:word;
   X:array[0..MPageSize-1]of byte; XL:integer absolute X;
-  wp:WordPtr; wpofs:word absolute wp; IsLongTxt:boolean;
+  wp:WordPtr; {$ifndef FPC}wpofs:word absolute wp;{$endif} IsLongTxt:boolean;
 label 1,2,3,4;
 begin
   if Pos<=0 then exit;
   if (Format<>T00Format) or NotCached then exit;
   if (Pos<MPageSize) or (Pos>=MLen) then begin Err(889,false); exit end;
-  PosPg:=Pos and ($FFFFFFFF shl MPageShft); PosI:=Pos and (MPageSize-1);
+  PosPg:=(Pos shr MPageShft) shl MPageShft; PosI:=word(Pos) and (MPageSize-1);
   RdWrCache(true,Handle,NotCached,PosPg,MPageSize,X);
   wp:=WordPtr(@X[PosI]); l:=wp^;
   if l<=MPageSize-2 then begin       { small text on 1 page}
     wp^:=-integer(l); N:=0; wp:=WordPtr(@X);
     while N<MPageSize-2 do begin
       if integer(wp^)>0 then begin FillChar(X[PosI+2],l,0); goto 1 end;
-      inc(N,-integer(wp^)+2); inc(wpofs,-integer(wp^)+2) end;
+      inc(N,-integer(wp^)+2); {$ifdef FPC}inc(PByte(wp),-integer(wp^)+2){$else}inc(wpofs,-integer(wp^)+2){$endif} end;
     if (FreePart>=PosPg) and (FreePart<PosPg+MPageSize) then begin
       FillChar(X,MPageSize,0); XL:=-510; FreePart:=PosPg;
 1:    RdWrCache(false,Handle,NotCached,PosPg,MPageSize,X) end
@@ -353,13 +377,13 @@ end;
 
 procedure TFile.RdWr(ReadOp:boolean;Pos:longint;N:word;var X);
 var
-  Rest,L:word; NxtPg:longint; P:pointer; POfs:word absolute P;
+  Rest,L:word; NxtPg:longint; P:pointer; {$ifndef FPC}POfs:word absolute P;{$endif}
 begin
-  Rest:=MPageSize-(word(Pos) and (MPageSize-1)); P:=@X;
+  Rest:=MPageSize-(longint(Pos) and (MPageSize-1)); P:=@X;
   while N>Rest do begin
     L:=Rest-4;
     RdWrCache(ReadOp,Handle,NotCached,Pos,L,P^);
-    inc(POfs,L); dec(N,L);
+    {$ifdef FPC}inc(PByte(P),L);{$else}inc(POfs,L);{$endif} dec(N,L);
     if not ReadOp then NxtPg:=NewPage(false);
     RdWrCache(ReadOp,Handle,NotCached,Pos+L,4,NxtPg);
     Pos:=NxtPg;
@@ -370,7 +394,7 @@ begin
 end;
 
 function TFile.Read(StackNr:word;Pos:longint):LongStrPtr;
-var s:LongStrPtr; i,l:word; p:CharArrPtr; pofs:word absolute p;
+var s:LongStrPtr; i,l:word; p:CharArrPtr; {$ifndef FPC}pofs:word absolute p;{$endif}
     FptD:record Typ,Len:longint end;
 label 0,1,11,2;
 begin
@@ -382,7 +406,7 @@ begin
       while l<=32768-MPageSize do begin
         RdWrCache(true,Handle,NotCached,Pos,MPageSize,p^);
         for i:=1 to MPageSize do begin if p^[i]=^z then goto 0; inc(l) end;
-        inc(pofs,MPageSize); inc(Pos,MPageSize) end;
+        {$ifdef FPC}inc(PByte(p),MPageSize);{$else}inc(pofs,MPageSize);{$endif} inc(Pos,MPageSize) end;
       dec(l);
 0:    s^.LL:=l; ReleaseStore(@s^.A[l+1]) end;
     FptFormat: begin
@@ -399,7 +423,12 @@ begin
 11:     if StackNr=1 then s:=GetStore(2) else s:=GetStore2(2); s^.LL:=0;
         goto 2 end;
       if l=MaxLStrLen+1 then dec(l);
-      if StackNr=1 then s:=GetStore(l+2) else s:=GetStore2(l+2); s^.LL:=l;
+      {$ifdef FPC}
+      if StackNr=1 then s:=GetStore(MaxLStrLen+2) else s:=GetStore2(MaxLStrLen+2);
+      {$else}
+      if StackNr=1 then s:=GetStore(l+2) else s:=GetStore2(l+2);
+      {$endif}
+      s^.LL:=l;
       RdWr(true,Pos+2,l,s^.A) end;
 2:Read:=s;
 end;
@@ -458,12 +487,17 @@ end;
 function FileD.IsShared:boolean;
 begin IsShared:=(UMode=Shared) or (UMode=RdShared) end;
 
+{$ifdef FPC}
+function FileD.NotCached:boolean;
+begin NotCached:=((UMode=Shared) or (UMode=RdShared)) and (LMode<>ExclMode) end;
+{$else}
 function FileD.NotCached:boolean; assembler;
 asm  les di,Self; xor ax,ax; mov dl,es:[di].FileD.UMode;
      cmp dl,Shared; je @1; cmp dl,RdShared; jne @2;
 @1:  cmp es:[di].FileD.LMode,ExclMode; je @2;
      mov ax,1;
 @2:  end;
+{$endif}
 function FileD.GetNrKeys:word;
 var k:KeyDPtr; n:word;
 begin

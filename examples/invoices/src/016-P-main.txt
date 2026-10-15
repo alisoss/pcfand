@@ -1,0 +1,21 @@
+{ Invoicing for PC FAND: customers, products, invoices and reports.
+  Esc on the menu bar ends the task. }
+begin
+  menubar of
+    'Data': menu pulldown of
+               'Customers': edit(CUSTOMER,());
+               'Products': edit(PRODUCT,());
+               'Invoices': edit(INVOICE,InvForm,noed=(CustName,Total));
+               'Invoice items': edit(ITEM,(No,Prod,Qty,Price,Amount));
+               'Settings': proc(Settings);
+               'Load sample data': proc(Samples);
+             end;
+    'Reports': menu pulldown of
+               'Invoices by customer': report(INVOICE,InvList);
+               'Invoices with items': report((INVOICE/@,ITEM/@),InvPrint);
+               'Sales by customer': proc(Sales);
+               'Unpaid invoices': proc(ShowUnpaid);
+             end;
+    'About': proc(About);
+  end;
+end;

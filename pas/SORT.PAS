@@ -19,10 +19,12 @@ implementation
 uses obaseww,oaccess,runfrml;
 
 procedure Ovr; far;
+{$ifdef FPC}begin end;{$else}
 assembler;
 asm   pop ax; pop ax; pop ax{bp}; push ax; push ax; call StackOvr;
       pop bp; pop ds; pop ax; pop dx; pop sp; push cs; push ax;
 end;
+{$endif}
 
 { the index is sorted by key value and input order(IR) !! }
 
@@ -111,6 +113,34 @@ type
 
 { WRec }
 
+{$ifdef FPC}
+function WRec.GetN:longint;
+begin GetN := longint(N[1]) or (longint(N[2]) shl 8) or (longint(N[3]) shl 16) end;
+procedure WRec.PutN(NN:longint);
+begin N[1] := byte(NN); N[2] := byte(NN shr 8); N[3] := byte(NN shr 16) end;
+procedure WRec.PutIR(II:longint);
+begin IR[1] := byte(II); IR[2] := byte(II shr 8); IR[3] := byte(II shr 16) end;
+function WRec.Comp(R:WRecPtr):word;
+var len1, len2, minlen, i: word;
+begin
+  len1 := ord(X.S[0]);
+  len2 := ord(R^.X.S[0]);
+  if len1 < len2 then minlen := len1 else minlen := len2;
+  for i := 1 to minlen do begin
+    if byte(X.S[i]) < byte(R^.X.S[i]) then begin Comp := 2; exit end;
+    if byte(X.S[i]) > byte(R^.X.S[i]) then begin Comp := 4; exit end;
+  end;
+  if len1 < len2 then begin Comp := 2; exit end;
+  if len1 > len2 then begin Comp := 4; exit end;
+  if IR[3] < R^.IR[3] then begin Comp := 2; exit end;
+  if IR[3] > R^.IR[3] then begin Comp := 4; exit end;
+  if IR[2] < R^.IR[2] then begin Comp := 2; exit end;
+  if IR[2] > R^.IR[2] then begin Comp := 4; exit end;
+  if IR[1] < R^.IR[1] then begin Comp := 2; exit end;
+  if IR[1] > R^.IR[1] then begin Comp := 4; exit end;
+  Comp := 1;
+end;
+{$else}
 function WRec.GetN:longint; assembler;
 asm les di,Self; mov ax,es:[di]; mov dl,es:[di+2]; xor dh,dh end;
 
@@ -135,9 +165,60 @@ asm push ds; cld; lds si,Self; mov al,[si+6]; add si,7;
 @3: mov ax,4;
 @4: pop ds;
 end;
+{$endif}
 
 { WPage }
 
+{$ifdef FPC}
+procedure WPage.Sort(N,RecLen:word);
+var X,Y,Z,V:WRecPtr;
+    oA:PtrUInt;
+    cx,cy:word;
+    iX,iY,R,L:integer;
+    Stack:array[0..127]of integer;
+    SP:integer;
+begin
+  if N<=1 then exit;
+  V:=GetStore(sizeof(WRec));
+  oA:=PtrUInt(@A);
+  SP:=0;
+  Stack[SP]:=0; inc(SP);
+  Stack[SP]:=N-1; inc(SP);
+  while SP>0 do begin
+    dec(SP); R:=Stack[SP];
+    dec(SP); L:=Stack[SP];
+    repeat
+      Z:=WRecPtr(oA+PtrUInt((L+R)shr 1)*RecLen);
+      MyMove(Z^,V^,RecLen);
+      X:=WRecPtr(oA+PtrUInt(L)*RecLen);
+      Y:=WRecPtr(oA+PtrUInt(R)*RecLen);
+      repeat
+        cx:=X^.Comp(V);
+        while cx=ord(_lt) do begin X:=WRecPtr(PtrUInt(X)+RecLen); cx:=X^.Comp(V) end;
+        cy:=V^.Comp(Y);
+        while cy=ord(_lt) do begin Y:=WRecPtr(PtrUInt(Y)-RecLen); cy:=V^.Comp(Y) end;
+        if PtrUInt(X)<=PtrUInt(Y) then begin
+          if (cx or cy)<>ord(_equ) then ExChange(X,Y,RecLen);
+          X:=WRecPtr(PtrUInt(X)+RecLen);
+          Y:=WRecPtr(PtrUInt(Y)-RecLen);
+        end;
+      until PtrUInt(X)>PtrUInt(Y);
+      iX:=(PtrUInt(X)-oA) div RecLen;
+      if PtrUInt(X)-RecLen>PtrUInt(Y) then iY:=iX-2 else iY:=iX-1;
+      if iY=L then L:=iX
+      else if iX=R then R:=iY
+      else if iY-L<R-iX then begin
+        if iX<R then begin Stack[SP]:=iX; inc(SP); Stack[SP]:=R; inc(SP) end;
+        R:=iY
+      end else begin
+        if L<iY then begin Stack[SP]:=L; inc(SP); Stack[SP]:=iY; inc(SP) end;
+        L:=iX
+      end;
+    until L>=R;
+  end;
+  ReleaseStore(V);
+end;
+{$else}
 procedure WPage.Sort(N,RecLen:word);
 procedure PushWord(W:word);inline($90);
 function PopWord:word;inline($58);
@@ -177,6 +258,7 @@ begin
   until OldSP=CurSP;
   ReleaseStore(V);
 end;
+{$endif}
 
 
 { WorkFile }
@@ -200,6 +282,7 @@ end;
 
 procedure WorkFile.Reset(KF:KeyFldDPtr; RestBytes:longint; Typ:char; NRecs:longint);
 var bytes:longint; pages:longint;
+{$ifdef FPC}    bx_val,cx_val,ax_val:longint;{$endif}
 const kB60=$0F000;
 begin
   KFRoot:=KF; RecLen:=7; while KF<>nil do begin
@@ -214,16 +297,31 @@ begin
   PW:=GetStore(WPageSize);
   WRoot:=GetFreeNr;
   pages:=(NRecs+MaxOnWPage-1) div MaxOnWPage;
+{$ifdef FPC}
+  bx_val:=pages; cx_val:=pages; ax_val:=1;
+  while bx_val>1 do begin
+    cx_val:=cx_val+pages;
+    if odd(bx_val) then begin
+      dec(cx_val,ax_val);
+      bx_val:=(bx_val shr 1)+1;
+    end else
+      bx_val:=bx_val shr 1;
+    ax_val:=ax_val shl 1;
+  end;
+  if cx_val=0 then cx_val:=1;
+  pages:=cx_val;
+{$else}
   asm mov dx,pages.word; mov bx,dx; mov cx,dx; mov ax,1;
    @1:add cx,dx; test bx,1; jz @2; sub cx,ax; shr bx,1; add bx,1; jmp @3;
    @2:shr bx,1;            { how many pages must be written ? }
    @3:shl ax,1; cmp bx,1; ja @1; cmp cx,0; jne @4; mov cx,1;
    @4:mov pages.word,cx end;
+{$endif}
   RunMsgOn(Typ,pages);
 end;
 
 procedure WorkFile.SortMerge;
-var r:WRecPtr; rofs:word absolute r; n:word; pg,nxt:longint;
+var r:WRecPtr; rofs:XPageOfs absolute r; n:word; pg,nxt:longint;
 begin
   PgWritten:=0;
   n:=0; r:=WRecPtr(@PW^.A); nxt:=WRoot; NChains:=1;
@@ -276,15 +374,15 @@ end;
 
 procedure WorkFile.Merge2Chains(Pg1,Pg2,Pg,Nxt:longint);
 var r1,r2,r:WRecPtr;
-  r1ofs:word absolute r1; r2ofs:word absolute r2; rofs:word absolute r;
-  max1ofs,max2ofs,maxofs:word;  eof1,eof2:boolean;
+  r1ofs:XPageOfs absolute r1; r2ofs:XPageOfs absolute r2; rofs:XPageOfs absolute r;
+  max1ofs,max2ofs,maxofs:XPageOfs;  eof1,eof2:boolean;
   chn:longint; l:word; w1,w2,w:WPagePtr;
 label 1,2,3,4;
 begin
   w1:=PW1; w2:=PW2; w:=PW; l:=RecLen; eof1:=false; eof2:=false;
   r1:=WRecPtr(@w1^.A); r2:=WRecPtr(@w2^.A); r:=WRecPtr(@w^.A);
-  max1ofs:=r1ofs+w1^.NRecs*l; max2ofs:=r2ofs+w2^.NRecs*l;
-  maxofs:=rofs+MaxOnWPage*l;
+  max1ofs:=r1ofs+XPageOfs(w1^.NRecs)*l; max2ofs:=r2ofs+XPageOfs(w2^.NRecs)*l;
+  maxofs:=rofs+XPageOfs(MaxOnWPage)*l;
 1:if rofs=maxofs then begin
     chn:=GetFreeNr; WriteWPage(MaxOnWPage,Pg,Nxt,chn); Pg:=chn; Nxt:=0;
     r:=WRecPtr(@w^.A) end;
@@ -295,14 +393,14 @@ begin
   if r1ofs=max1ofs then begin
     PutFreeNr(Pg1); Pg1:=w1^.Chain;
     if Pg1<>0 then begin
-      ReadWPage(w1,Pg1); r1:=WRecPtr(@w1^.A); max1ofs:=r1ofs+w1^.NRecs*l end
+      ReadWPage(w1,Pg1); r1:=WRecPtr(@w1^.A); max1ofs:=r1ofs+XPageOfs(w1^.NRecs)*l end
     else if eof2 then goto 4 else eof1:=true end;
   goto 1;
 3:MyMove(r2^,r^,l); inc(rofs,l); inc(r2ofs,l);
   if r2ofs=max2ofs then begin
     PutFreeNr(Pg2); Pg2:=w2^.Chain;
     if Pg2<>0 then begin
-      ReadWPage(w2,Pg2); r2:=WRecPtr(@w2^.A); max2ofs:=r2ofs+w2^.Nrecs*l end
+      ReadWPage(w2,Pg2); r2:=WRecPtr(@w2^.A); max2ofs:=r2ofs+XPageOfs(w2^.Nrecs)*l end
     else if eof1 then goto 4 else eof2:=true end;
   goto 1;
 4:WriteWPage((rofs-ofs(w^.A))div l,Pg,Nxt,0);
@@ -319,7 +417,7 @@ begin
   ReadH(Handle,WPageSize,W^); TestErr;
 end;
 procedure WorkFile.WriteWPage(N:word;Pg,Nxt,Chn:longint);
-var r:WRecPtr; rofs:word absolute r;
+var r:WRecPtr; rofs:XPageOfs absolute r;
 begin
   inc(PgWritten); RunMsgN(PgWritten);
   if NChains=1 then begin
@@ -336,8 +434,39 @@ end;
 procedure XXPage.Reset(OwnerXW:XWorkFilePtr);
 begin
   XW:=OwnerXW; Sum:=0; NItems:=0;
-  MaxOff:=ofs(Chain)+sizeof(XXPage); Off:=ofs(A) end;
+{$ifdef FPC}
+  Off:=PtrUInt(@A)-PtrUInt(@Self); MaxOff:=sizeof(XXPage);
+{$else}
+  MaxOff:=ofs(Chain)+sizeof(XXPage); Off:=ofs(A)
+{$endif}
+  end;
 
+{$ifdef FPC}
+procedure XXPage.PutN(var N);
+var p: PByte;
+begin p := PByte(PtrUInt(@Self) + Off); Move(N, p^, 3); inc(Off, 3) end;
+procedure XXPage.PutDownPage(DownPage:longint);
+var p: PByte;
+begin p := PByte(PtrUInt(@Self) + Off); Move(DownPage, p^, 4); inc(Off, 4) end;
+procedure XXPage.PutMLX(M,L:byte);
+var p: PByte;
+begin
+  p := PByte(PtrUInt(@Self) + Off);
+  p^ := M; inc(p);
+  p^ := L; inc(p);
+  Move(LastIndex[M+1], p^, L);
+  inc(Off, 2 + L);
+end;
+procedure XXPage.ClearRest;
+var p: PByte; cnt: integer;
+begin
+  cnt := integer(MaxOff) - integer(Off);
+  if cnt > 0 then begin
+    p := PByte(PtrUInt(@Self) + Off);
+    FillChar(p^, cnt, 0);
+  end;
+end;
+{$else}
 procedure XXPage.PutN(var N); assembler;
 asm push ds; cld; les bx,Self; mov di,es:[bx].XXPage.Off;
     lds si,N; lodsw; stosw; lodsb; stosb;
@@ -358,6 +487,7 @@ asm push ds; cld; les bx,Self; mov di,es:[bx].XXPage.Off;
 procedure XXPage.ClearRest; assembler;
 asm les bx,Self; mov di,es:[bx].XXPage.Off; mov cx,es:[bx].XXPage.MaxOff;
     sub cx,di; jcxz @1; cld; mov al,0; rep stosb; @1: end;
+{$endif}
 
 procedure XXPage.PageFull;
 var n:longint;
@@ -439,7 +569,7 @@ end;
 
 procedure XWorkFile.CopyIndex(K:KeyDPtr;KF:KeyFldDPtr;Typ:char);
 var r:WRecPtr; p:XPagePtr; page:longint; n:word; i:longint;
-    x:XItemPtr; xofs:word absolute x;
+    x:XItemPtr; xofs:XPageOfs absolute x;
 begin
   r:=GetStore(sizeof(WRec)); r^.X.S:=''; p:=GetStore(XPageSize);
   K^.NrToPath(1); page:=XPath[XPathN].Page; RunMsgOn(Typ,K^.NRecs); i:=0;
@@ -484,7 +614,9 @@ var er:ExitRecord; cr,p:pointer; md:LockMode; fail:boolean;
     XW:XWorkFilePtr; Scan:XScanPtr;   XF:XFilePtr;
 label 1;
 begin
-  NewExit(Ovr,er); goto 1; MarkStore(p); fail:=true;
+  {$ifdef FPC}Move(ExitBuf,er,sizeof(ExitRecord)); ExitBuf.OvrEx:=Ovr; ExitBuf.ExP:=ExitP; ExitBuf.BrkP:=BreakP;
+    ExitBuf.mBP:=MyBP; if SetJmp(ExitBuf.JmpBuf)<>0 then begin GoExitFired:=true; goto 1 end else GoExitFired:=false;
+    KeepInMemory([@cr,@p,@md,@fail,@XW,@Scan,@XF]);{$else}NewExit(Ovr,er); goto 1;{$endif} MarkStore(p); fail:=true;
   XF:=CFile^.XF; cr:=CRecPtr; CRecPtr:=GetRecSpace;
   md:=NewLMode(RdMode); TryLockN(0,0); {ClearCacheCFile;}
   if XF^.Handle=$FF then RunError(903);

@@ -4,7 +4,7 @@ unit BASE;
 
 interface
 
-uses dos,graph,overlay,drivers;
+uses dos,{$ifdef FandGraph}graph,{$endif}{$ifdef FPC}SysUtils,{$else}overlay,{$endif}drivers;
 
                       { COMMON }
 
@@ -25,6 +25,10 @@ type string2=string[2]; string3=string[3]; string4=string[4];
      LongStrPtr=^LongStr;
      StringPtr=^string255; PString=StringPtr;
      StringPtrArr=array[1..10] of StringPtr;
+{$ifdef FPC}
+     TByteArray=array[0..32767] of byte;
+     PByteArray=^TByteArray;
+{$endif}
      BytePtr=^byte;CharPtr=^char;BooleanPtr=^boolean;WordPtr=^word;
      IntegerPtr=^integer;LongintPtr=^longint;FloatPtr=^float;
      RealPtr=^real;
@@ -36,6 +40,7 @@ type string2=string[2]; string3=string[3]; string4=string[4];
      WordRec = record Lo, Hi: Byte end;
      LongRec = record Lo, Hi: Word end;
      PtrRec  = record Ofs, Seg: Word end;
+     SgOfsInt = {$ifdef FPC}PtrUInt{$else}word{$endif};
 
 const EmptyStr:string[1]='';
       MaxLStrLen = 65000;
@@ -54,7 +59,7 @@ procedure ChainLast(var Frst;New:pointer);
 function LastInChain(var Frst):pointer;
 function ListLength(P:pointer):word;
 function ListAt(P:pointer;I:word):pointer;
-procedure ReplaceChar(S:string;C1,C2:char);
+procedure ReplaceChar({$ifdef FPC}var{$endif} S:string;C1,C2:char);
  function SEquUpcase(S1,S2:string):boolean;
  function StrPas(Src:PChar):string;
 procedure StrLPCopy(Dest:PChar;s:string;MaxL:word);
@@ -75,8 +80,11 @@ function CountDLines(var Buf;L:word;C:char):word;
 function GetDLine(var Buf;L:word;C:char;I:word):string;
 function FindCtrlM(s:LongStrPtr;i,n:word):word;
 function SkipCtrlMJ(s:LongStrPtr;i:word):word;
-procedure AddBackSlash(S:string);
-procedure DelBackSlash(S:string);
+procedure AddBackSlash({$ifdef FPC}var {$endif}S:string);
+procedure DelBackSlash({$ifdef FPC}var {$endif}S:string);
+{$ifdef FPC}
+function UnixPath(const S:string):string;
+{$endif}
 function MouseInRect(X,Y,XSize,YSize:word):boolean;
 function MouseInRectProc(X,Y,XSize,YSize:word):boolean;
 function HexStrToLong(S:string):longint;
@@ -178,20 +186,24 @@ var
 function Cache(Handle:byte;Page:longint):CachePagePtr;
 procedure FormatCache;
 procedure AlignParagraph;
- function GetStore(Size:word):pointer;
- function GetZStore(Size:word):pointer;
+type
+  StoreSize={$ifdef FPC}PtrUInt{$else}word{$endif};
+ function GetStore(Size:StoreSize):pointer;
+ function GetZStore(Size:StoreSize):pointer;
 procedure MarkStore(var p:pointer);
 procedure ReleaseStore(p:pointer);
 procedure ReleaseAfterLongStr(p:pointer);
  function StoreAvail:longint;
- function GetStore2(Size:word):pointer;
- function GetZStore2(Size:word):pointer;
+ function GetStore2(Size:StoreSize):pointer;
+ function GetZStore2(Size:StoreSize):pointer;
  function StoreStr(S:string):StringPtr;
 procedure MarkStore2(var p:pointer);
 procedure ReleaseStore2(p:pointer);
 procedure MarkBoth(var p,p2:pointer);
 procedure ReleaseBoth(p,p2:pointer);
 procedure AlignLongStr;
+procedure AlignSegment(Skip:word);
+function HeapTop:pointer;
 
 
 type
@@ -204,6 +216,7 @@ type
     mBP:pointer;
     rBP,rIP,rCS,rSP,rDS: word;
     ExP,BrkP: boolean;
+    {$ifdef FPC}JmpBuf: jmp_buf;{$endif}
   end;
 
 var
@@ -211,6 +224,9 @@ var
   MyBP,ProcMyBP:ProcStkPtr;
   BPBound:word;
   ExitP,BreakP:boolean;
+{$ifdef FPC}
+  GoExitFired:boolean;
+{$endif}
 const
   LastExitCode:longint=0;
 
@@ -218,6 +234,10 @@ procedure StackOvr(NewBP:word);
 procedure NewExit(POvr:PProcedure; var Buf:ExitRecord);
 procedure GoExit;
 procedure RestoreExit(var Buf:ExitRecord);
+{$ifdef FPC}procedure KeepInMemory(const P:array of pointer);{$endif}
+{$ifdef FPC}
+const OSShellQuiet:boolean=false;   { no message: the caller has its own fallback }
+{$endif}
 function OSshell(Path:PathStr;CmdLine:String127;
    NoCancel,FreeMm,LdFont,TextMd:boolean):boolean;
 
@@ -375,7 +395,7 @@ const  LaptopCGA:boolean=false;         { text.mode?, ~graph.}
 
 {menu: mNorm-text;mHili-vybrana volba;mFirst-prvni pismeno;
  select: sNorm-text;sHili-vybrany prvek;sMask-maska pro vyber souboru(i ^K^R);
- prompt...: pNorm-zadavani textu z klavesnice(prompt,kalkula‡ka,heslo,podmno‘ina,^Q^A,F3,dotazy);
+ prompt...: pNorm-zadavani textu z klavesnice(prompt,kalkulaï¿½ka,heslo,podmnoï¿½ina,^Q^A,F3,dotazy);
             pTxt-pomocny text pri zadavani(- " -);
  message: zNorm-text hlaseni F10,kompilace,procenta;
  last line: lNorm-napoveda v poslednim radku;lFirst-oznaceni klaves;lSwitch-prepinace,locks;
@@ -417,10 +437,15 @@ var printer:array[0..9] of
           OpCls,ToHandle,ToMgr:boolean; Handle:word end;
 type TPrTimeOut=array[1..4] of byte;
 var OldPrTimeOut:TPrTimeOut;
+{$ifdef FPC}
+    PrTimeOut:TPrTimeOut;
+{$else}
     PrTimeOut:TPrTimeOut absolute 0:$478;
+{$endif}
 
 type WDaysTabType=array[1..1]of record Typ:byte;Nr:word end;
-var  NWDaysTab:word; WDaysFirst:real; WDaysLast:real;
+var NWDaysTab:word; WDaysFirst:{$ifdef FPC}array[1..6] of byte{$else}real{$endif}; WDaysLast:{$ifdef FPC}array[1..6] of
+  byte{$else}real{$endif};
      WDaysTab:^WDaysTabType;
 
 {end of INSTALL 1}
@@ -452,7 +477,7 @@ var
   MsgIdxN:word; FrstMsgPos:longint;
   CallOpenFandFiles: procedure(FromDML:boolean);
   CallCloseFandFiles: procedure(FromDML:boolean);
-procedure OpenOvrFile;
+{$ifndef FPC}procedure OpenOvrFile;{$endif}
 procedure OpenResFile;
 procedure OpenWorkH;
 
@@ -465,6 +490,8 @@ implementation      {*******************************************************}
 uses obase,obaseww,oaccess,
      access  {SetCPathForH,StoreInTWork,ReadDelINTWork,SQLDisconnect}
 {$ifdef FandSQL}  ,channel  {$endif}  {SQLDisconnect}
+{$ifdef UNIX}    ,Unix  {$endif}
+{$ifdef FPC}    ,fanddos {$endif}
      ,runfand;
 
 
@@ -480,6 +507,7 @@ uses obase,obaseww,oaccess,
  for it. This we change to a type 1 address.  }
 
 procedure StackOvr(NewBP:word);
+{$ifdef FPC}begin end;{$else}
 type SF=record BP:word; case byte of 0:(Ret:pointer); 1:(RetOfs:word) end;
 var p,q:^SF;   pofs:word absolute p; qofs:word absolute q;
     r,t:^word; rofs:word absolute r; tofs:word absolute t;
@@ -495,14 +523,17 @@ begin
     qofs:=q^.BP end end;
 1:end;
 end;
+{$endif}
 
-procedure NoOvr; far; assembler;
+{$ifndef FPC}
+procedure NoOvr; assembler;
 asm   pop ax; pop ax; pop ax{bp}; push ax; push ax; call StackOvr;
       pop bp; pop ds; pop ax; pop dx; pop sp; push dx; push ax;
 end;
+{$endif}
 
 
-{$I common}
+{$ifdef FPC}{$I commonfpc}{$else}{$I common}{$endif}
 
 
 
@@ -515,12 +546,18 @@ const
 {$I memory}
 
 function PrTab(N:word):string;
+{$ifdef FPC}
+var p:PByte; i:word; s:string;
+begin p:=printer[prCurr].Strg; for i:=1 to N do inc(p,p^+1);
+  s[0]:=char(p^); Move((p+1)^,s[1],p^); PrTab:=s end;
+{$else}
 var p:pointer;
 begin p:=printer[prCurr].Strg;
 asm  push ds; cld; lds si,p; les di,@result; mov cx,N; inc cx; xor ax,ax;
 @1:  add si,ax; lodsb; loop @1;
      stosb; mov cx,ax; rep movsb; pop ds end;
 end;
+{$endif}
 procedure SetCurrPrinter(NewPr:integer);
 begin
   if NewPr>=prMax then exit;
@@ -542,14 +579,20 @@ begin
 end;
 label 1;
 begin
-  asm mov ax,SEG @Data; mov ds,ax end;
+  {$ifndef FPC}asm mov ax,SEG @Data; mov ds,ax end;{$endif}
   ExitProc:=ExitSave;
   if not WasInitPgm then begin UnExtendHandles; goto 1 end;
-  if ErrorAddr<>nil then case ExitCode of
+  if ErrorAddr<>nil then
+    {$ifdef FPC}
+    writeln(StdErr,'FAND: runtime error ',ExitCode)
+    {$else}
+    case ExitCode of
     202{stack overflow}:
         begin asm mov sp,ExitBuf.rSP end; WrLLF10Msg(625) end;
     209{overlay read error}: WrLLF10Msg(648);
-    else WrTurboErr end;
+    else WrTurboErr end
+    {$endif}
+    ;
   {$ifdef FandSQL} SQLDisconnect; {$endif}
   UnExtendHandles;
   DeleteFile(FandWorkName); DeleteFile(FandWorkXName);
@@ -558,10 +601,12 @@ begin
 1:if WasInitDrivers then begin
     DoneMouseEvents; CrsIntrDone; BreakIntrDone;
     if IsGraphMode then begin
-      CloseGraph; IsGraphMode:=false; ScrSeg:=video.Address end;
+      {$ifdef FandGraph}CloseGraph;{$endif} IsGraphMode:=false; ScrSeg:=video.Address end;
+    {$ifndef FPC}
     asm  push bp; mov ah,0fH; int 10H; cmp al,StartMode; je @1;
          mov ah,0; mov al,StartMode; int 10H;
     @1:  pop bp end;
+    {$endif}
     window(1,1,TxtCols,TxtRows); TextAttr:=StartAttr; ClrScr; CrsNorm;
     ChDir(OldDir);
     SetCurrPrinter(-1) end;
@@ -571,13 +616,16 @@ end; {$S+}
 procedure OpenResFile;
 begin
   CPath:=FandResName; CVol:=''; ResFile.Handle:=OpenH(_isoldfile,RdOnly);
-  if HandleError<>0 then begin write('can''t open '+FandResName);wait;halt end;
+  if HandleError<>0 then begin write('can''t open '+FandResName);wait;{$ifdef FPC}halt(1){$else}halt{$endif} end;
 end;
 
 procedure OpenWorkH;
 begin
   CPath:=FandWorkName; CVol:=''; WorkHandle:=OpenH(_isoldnewfile,Exclusive);
-  if HandleError<>0 then begin write('can''t open '+FandWorkName);wait;halt end;
+  if HandleError<>0 then begin write('can''t open '+FandWorkName);
+    {$ifdef FPC}if HandleError=5 then
+      write(' - another FAND uses it; give each its own FANDWORK directory');{$endif}
+    wait;{$ifdef FPC}halt(1){$else}halt{$endif} end;
 end;
 
 
@@ -611,6 +659,7 @@ begin
 end;
 {$S+}
 
+{$ifndef FPC}
 procedure InitOverlays;
 var name:NameStr; ext:ExtStr; sz,err:integer; l:longint; s:string;
 const OvrlSz=124;
@@ -635,12 +684,20 @@ begin
   CPath:=FandOvrName; CVol:=''; h:=OpenH(_isoldfile,RdOnly);
   if h<>OvrHandle then begin write('can''t open FAND.OVR'); wait; halt end;
 end;
+{$endif}
 
 begin
-  CurPSP:=ptr(PrefixSeg,0); MyHeapEnd:=HeapEnd; ExtendHandles; prCurr:=-1;
-  InitOverlays;
+  {$ifdef FPC}CurPSP:=nil; MyHeapEnd:=nil; InitMemoryArenas;{$else}CurPSP:=ptr(PrefixSeg,0); MyHeapEnd:=HeapEnd;{$endif}
+    ExtendHandles; prCurr:=-1;
+  {$ifndef FPC}InitOverlays;{$endif}
   ExitSave:=ExitProc; ExitProc:=@MyExit; MyBP:=nil;
   UserLicNr:=word(UserLicNrShow) and $7FFF;
   FandResName:=MyFExpand('Fand.Res','FANDRES');
+  {$ifdef FPC}
+  { BP7 set these with the overlays: the start directory, and FAND's own -
+    here where the system help is, found as FAND.RES is }
+  GetDir(0,OldDir);
+  FandDir:=ExtractFilePath(MyFExpand('FANDHLP.000','FANDRES'));
+  {$endif}
   OpenResFile;
 end.

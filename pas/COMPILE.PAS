@@ -5,7 +5,7 @@ unit compile;
 
 interface
 
-uses dos,drivers,base,access,wwmix,rdrun;
+uses dos,{$ifdef FPC}sysutils,{$endif}drivers,base,access,wwmix,rdrun;
 
 function EquUpcase(const S:string):boolean;
 procedure Error(N:integer);
@@ -92,14 +92,25 @@ uses  obaseww,oaccess,rdfildcl,
       editor,rdproc,runproj;
 
 procedure Ovr; far;
+{$ifdef FPC}begin end;{$else}
 assembler;
 asm   pop ax; pop ax; pop ax{bp}; push ax; push ax; call StackOvr;
       pop bp; pop ds; pop ax; pop dx; pop sp; push cs; push ax;
 end;
+{$endif}
 
 function StateLen:word;
+{$ifdef FPC}
+var n:PtrUInt;
+{$endif}
 begin
+{$ifdef FPC}
+  n:=PtrUInt(@LstCompileVar)-PtrUInt(@CurrChar);
+  if (n=0) or (n>60000) then RunError(887);
+  StateLen:=n;
+{$else}
   StateLen:=ofs(LstCompileVar)-ofs(CurrChar);
+{$endif}
 end;
 function SaveCompState:pointer;
 var p:pointer; n:integer;
@@ -109,7 +120,7 @@ end;
 procedure RestoreCompState(p:pointer);
 begin
   Move(p^,CurrChar,StateLen);
-  ReleaseStore2(ptr(PtrRec(p).Seg,PtrRec(p).Ofs+StateLen));
+  ReleaseStore2({$ifdef FPC}pointer(PtrUInt(p)+StateLen){$else}ptr(PtrRec(p).Seg,PtrRec(p).Ofs+StateLen){$endif});
 end;
 
 {$I lexanal}

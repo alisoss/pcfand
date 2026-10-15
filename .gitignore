@@ -1,0 +1,13 @@
+*.o
+*.ppu
+*.dSYM/
+bin/
+build/
+pas/FAND
+examples/*/*.RDB
+examples/*/*.TTT
+examples/*/*.000
+examples/*/*.X00
+examples/*/*.T00
+examples/*/FANDWORK.*
+examples/*/PRINTER.TXT

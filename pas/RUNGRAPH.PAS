@@ -36,9 +36,9 @@ begin
   KontrFilePCX:=true;
   if assigned=nil then Par.filePCX:='GRAPH.PCX' else Par.filePCX:=RunShortStr(Assigned);
   path:='';
-  if pos('\',par.filePCX)>0 then
+  if pos({$ifdef FPC}DirectorySeparator{$else}'\'{$endif},par.filePCX)>0 then
 	begin
-	  for c:=1 to length(par.filePCX) do if par.filePCX[c]='\' then cn:=c;
+	  for c:=1 to length(par.filePCX) do if par.filePCX[c]={$ifdef FPC}DirectorySeparator{$else}'\'{$endif} then cn:=c;
 	  path:=copy(par.filePCX,1,cn);
 	  par.filePCX:=copy(par.filePCX,cn+1,length(par.filePCX));
 	end;

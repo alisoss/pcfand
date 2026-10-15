@@ -4,7 +4,7 @@ unit Drivers;
 
 interface
 
-uses dos,graph;
+uses dos{$ifdef FandGraph},graph{$endif}{$ifdef FPC},SysUtils{$endif};
 
 type
   TPoint = object
@@ -77,7 +77,11 @@ type
   TVideoFont = (foAscii,foLatin2,foKamen);
 var
   KbdChar:word;
+{$ifdef FPC}
+  KbdFlgs:byte;
+{$else}
   KbdFlgs:byte absolute 0:$417;
+{$endif}
 const
   DemoAutoRd:boolean=false;
   KbdBuffer:string='';
@@ -121,6 +125,11 @@ procedure ScrWrChar(X,Y:word;C:char;Color:byte);
 procedure ScrWrStr(X,Y:word;const S:string;Color:byte);
 procedure ScrWrFrameLn(X,Y:word;Typ,Width,Color:byte);
 procedure ScrWrBuf(X,Y:word;var Buf;L:word);
+{$ifdef FPC}
+function  TermSize(var Cols,Rows:word):boolean;
+procedure ScrRepaintAll;
+procedure InstallWinch;
+{$endif}
 procedure ScrRdBuf(X,Y:word;var Buf;L:word);
 function ScrPush(X,Y,SizeX,SizeY:word):pointer;
 procedure ScrPop(X,Y:word;P:pointer);
@@ -130,6 +139,7 @@ procedure ScrColor(X,Y,L:word;Color:byte);
 
 const
   MaxTxtCols=132; {the best adapter}
+  MaxTxtRows=100;
   EventQSize = 16;
   BGIReload:boolean=true;
 var
@@ -196,24 +206,996 @@ procedure ClrEvent;
 function AddCtrlAltShift(Flgs:byte):word;
 
 
+{$ifdef FPC}
+var   Timer:longint;
+{$else}
 var   Timer:longint absolute 0:$46C;
+{$endif}
 const ofsTicks=$6C;
 
 const FrameChars:array[0..20] of char=
-         ('Ú','Ä','¿','À','Ä','Ù','³',' ','³',
-          'É','Í','»','È','Í','¼','º',' ','º','Ã','Ä','´');
+         (#$da,#$c4,#$bf,#$c0,#$c4,#$d9,#$b3,' ',#$b3,
+          #$c9,#$cd,#$bb,#$c8,#$cd,#$bc,#$ba,' ',#$ba,#$c3,#$c4,#$b4);
       MouseWhere:TPoint=(X:0;Y:0);
       MouseWhereG:TPoint=(X:0;Y:0);     {pixel}
       MausVisible:boolean=true;
 
+{$ifdef FPC}
+var FandBatch:boolean;
+    BatchQuiet:boolean;
+{ the terminal is gone - stdin ended, SIGHUP or SIGTERM: WaitEvent calls
+  HangupProc (RunFand: save the files) and ends FAND }
+var HangupProc:procedure;
+    HangupRequested:boolean;
+{ around a program FAND runs: the terminal as programs expect it (Msg on a
+  cleared screen, if any), then FAND's raw mode and its screen again }
+procedure TtyForChild(const Msg:string);
+procedure TtyForFand;
+{ a loop that waits for a key itself: up to Ms for input, Timer brought
+  up to date (WaitEvent alone moves it) }
+procedure IdleTick(Ms:word);
+{$endif}
 
 procedure AssignCrt(var T:text);
 
 
 implementation
 
-uses base,obaseww,wwmenu;
+uses base,obaseww,wwmenu{$ifdef FPC},Crt,fandcp
+     {$ifdef UNIX},BaseUnix,TermIO{$endif}
+     {$ifdef MSWINDOWS},Windows{$endif}{$endif};
 
+{$ifdef FPC}
+procedure TPoint.Assign(XX,YY:word);
+begin X:=XX; Y:=YY end;
+constructor TObject.Init;
+begin end;
+destructor TObject.Done;
+begin end;
+procedure Free(P: PObject); begin if P <> nil then Dispose(P, Done) end;
+const RawTtyEnabled: boolean = false;
+const RawTtyTried: boolean = false;
+procedure RestoreTty; forward;
+procedure TermCursorDone; forward;
+const TermCrsStale:boolean=true;
+const
+  TtyRestoreArmed: boolean = false;
+  PrevExitProc: pointer = nil;
+procedure FandRestoreExit; begin ExitProc := PrevExitProc; TermCursorDone; RestoreTty end;
+procedure ArmTtyRestore;
+begin
+  if TtyRestoreArmed then exit;
+  TtyRestoreArmed := true;
+  PrevExitProc := ExitProc;
+  ExitProc := @FandRestoreExit;
+end;
+{$ifdef UNIX}
+procedure EnsureRawTty;
+var rc: longint;
+begin
+  if RawTtyTried or FandBatch then exit;
+  RawTtyTried := true;
+  if IsATTY(0) = 0 then exit;
+  rc := SysUtils.ExecuteProcess('/bin/stty', '-icanon -echo min 1 time 0');
+  RawTtyEnabled := rc = 0; ArmTtyRestore;
+end;
+procedure RestoreTty; begin if RawTtyEnabled then SysUtils.ExecuteProcess('/bin/stty', 'sane') end;
+{ select says "readable" at the end of input too: read a byte ahead, so
+  that the end is seen as no key, not as a key that never comes }
+const StdinNext:integer=-1; StdinEof:boolean=false;
+function StdinReadAhead:boolean;
+var b: byte; n: longint;
+begin
+  repeat n := fpRead(0, b, 1) until (n <> -1) or (fpgeterrno <> ESysEINTR);
+  if n = 1 then StdinNext := b
+  else if (n = 0) or (fpgeterrno <> ESysEAGAIN) then begin
+    StdinEof := true; HangupRequested := true end;
+  StdinReadAhead := StdinNext >= 0;
+end;
+function PollStdinMs(ms:word):boolean;
+var fds: TFDSet; tv: TTimeVal; rc: longint;
+begin
+  PollStdinMs := false; if FandBatch then exit;
+  if StdinNext >= 0 then begin PollStdinMs := true; exit end;
+  if StdinEof then begin if ms > 0 then SysUtils.Sleep(ms); exit end;
+  fpFD_ZERO(fds); fpFD_SET(0, fds);
+  tv.tv_sec := ms div 1000; tv.tv_usec := (ms mod 1000) * 1000;
+  rc := fpSelect(1, @fds, nil, nil, @tv);
+  if rc > 0 then PollStdinMs := StdinReadAhead;
+end;
+function PollStdin: boolean;
+begin PollStdin := PollStdinMs(0) end;
+function ReadStdinByte: byte;
+begin
+  ReadStdinByte := 0;
+  if (StdinNext < 0) and not StdinEof then StdinReadAhead;
+  if StdinNext >= 0 then begin ReadStdinByte := StdinNext; StdinNext := -1 end;
+end;
+procedure TermWrite(var Buf; Len:longint);
+begin if FandBatch then exit; fpWrite(1, Buf, Len); TermCrsStale:=true end;
+{$else}
+const
+  ENABLE_VT_PROCESSING = $0004;
+  ENABLE_EXT_FLAGS     = $0080;
+  ENABLE_QUICK_EDIT    = $0040;
+const
+  OldInMode:  dword = 0;
+  OldOutMode: dword = 0;
+const StdinEof:boolean=false;
+procedure EnsureRawTty;
+var hIn,hOut:THandle; m:dword;
+begin
+  if RawTtyTried or FandBatch then exit;
+  RawTtyTried := true;
+  hIn  := GetStdHandle(STD_INPUT_HANDLE);
+  hOut := GetStdHandle(STD_OUTPUT_HANDLE);
+  if GetConsoleMode(hIn,@OldInMode) then begin
+    m := OldInMode and not dword(ENABLE_LINE_INPUT or ENABLE_ECHO_INPUT
+                                or ENABLE_PROCESSED_INPUT or ENABLE_QUICK_EDIT
+                                or ENABLE_MOUSE_INPUT or ENABLE_WINDOW_INPUT);
+    m := m or ENABLE_EXT_FLAGS;
+    RawTtyEnabled := SetConsoleMode(hIn, m);
+  end;
+  if GetConsoleMode(hOut,@OldOutMode) then
+    SetConsoleMode(hOut, OldOutMode or ENABLE_VT_PROCESSING);
+  ArmTtyRestore;
+end;
+procedure RestoreTty;
+begin
+  if OldInMode  <> 0 then SetConsoleMode(GetStdHandle(STD_INPUT_HANDLE), OldInMode);
+  if OldOutMode <> 0 then SetConsoleMode(GetStdHandle(STD_OUTPUT_HANDLE),OldOutMode);
+end;
+const KeyBytes: string = '';
+function KeyRecToBytes(const r:TInputRecord):string;
+var vk,md:word; ch:char; ctrl,alt,shift:boolean; cs:dword; ms:string;
+  function Nav(fin:char):string; begin if md=1 then Nav:=#27'['+fin else Nav:=#27'[1;'+ms+fin end;
+  function Tilde(n:string):string;
+  begin if md=1 then Tilde:=#27'['+n+'~' else Tilde:=#27'['+n+';'+ms+'~' end;
+begin
+  KeyRecToBytes := '';
+  if (r.EventType <> KEY_EVENT) or (not r.Event.KeyEvent.bKeyDown) then exit;
+  vk := r.Event.KeyEvent.wVirtualKeyCode;
+  if vk in [VK_SHIFT,VK_CONTROL,VK_MENU,VK_CAPITAL,
+            VK_NUMLOCK,VK_SCROLL,VK_LWIN,VK_RWIN] then exit;
+  cs := r.Event.KeyEvent.dwControlKeyState;
+  ctrl  := (cs and (LEFT_CTRL_PRESSED or RIGHT_CTRL_PRESSED)) <> 0;
+  alt   := (cs and (LEFT_ALT_PRESSED  or RIGHT_ALT_PRESSED )) <> 0;
+  shift := (cs and SHIFT_PRESSED) <> 0;
+  md := 1; if shift then inc(md); if alt then inc(md,2); if ctrl then inc(md,4);
+  str(md,ms);
+  case vk of
+    VK_UP:     begin KeyRecToBytes:=Nav('A'); exit end;
+    VK_DOWN:   begin KeyRecToBytes:=Nav('B'); exit end;
+    VK_RIGHT:  begin KeyRecToBytes:=Nav('C'); exit end;
+    VK_LEFT:   begin KeyRecToBytes:=Nav('D'); exit end;
+    VK_HOME:   begin KeyRecToBytes:=Nav('H'); exit end;
+    VK_END:    begin KeyRecToBytes:=Nav('F'); exit end;
+    VK_INSERT: begin KeyRecToBytes:=Tilde('2'); exit end;
+    VK_DELETE: begin KeyRecToBytes:=Tilde('3'); exit end;
+    VK_PRIOR:  begin KeyRecToBytes:=Tilde('5'); exit end;
+    VK_NEXT:   begin KeyRecToBytes:=Tilde('6'); exit end;
+    VK_F1..VK_F4:
+      if md=1 then begin KeyRecToBytes:=#27'O'+chr(ord('P')+vk-VK_F1); exit end
+      else begin KeyRecToBytes:=#27'[1;'+ms+chr(ord('P')+vk-VK_F1); exit end;
+    VK_F5:  begin KeyRecToBytes:=Tilde('15'); exit end;
+    VK_F6:  begin KeyRecToBytes:=Tilde('17'); exit end;
+    VK_F7:  begin KeyRecToBytes:=Tilde('18'); exit end;
+    VK_F8:  begin KeyRecToBytes:=Tilde('19'); exit end;
+    VK_F9:  begin KeyRecToBytes:=Tilde('20'); exit end;
+    VK_F10: begin KeyRecToBytes:=Tilde('21'); exit end;
+    VK_F11: begin KeyRecToBytes:=Tilde('23'); exit end;
+    VK_F12: begin KeyRecToBytes:=Tilde('24'); exit end;
+    VK_TAB: if shift then begin KeyRecToBytes:=#27'[Z'; exit end;
+  end;
+  ch := r.Event.KeyEvent.AsciiChar;
+  if ch = #0 then exit;
+  (* AltGr comes as Ctrl+Alt with the character it makes (@ # $ [ ] and
+     the braces on Czech and other keyboards): that character, not Alt+key *)
+  if alt and ctrl and (ch >= ' ') then alt := false;
+  if alt and (vk <> VK_ESCAPE) then KeyRecToBytes := #27 + ch
+  else KeyRecToBytes := ch;
+end;
+function PollStdinMs(ms:word):boolean;
+var
+  h:THandle; avail,got,i:dword; deadline,now:qword; wait:dword;
+  rec:array[0..15] of TInputRecord;
+begin
+  PollStdinMs := false; if FandBatch then exit;
+  if KeyBytes <> '' then begin PollStdinMs := true; exit end;
+  if StdinEof then begin if ms > 0 then Sleep(ms); exit end;
+  h := GetStdHandle(STD_INPUT_HANDLE);
+  deadline := SysUtils.GetTickCount64 + ms;
+  repeat
+    avail := 0;
+    if not GetNumberOfConsoleInputEvents(h,avail) then begin
+      PollStdinMs := WaitForSingleObject(h,ms) = WAIT_OBJECT_0;
+      exit;
+    end;
+    if avail > 0 then begin
+      if avail > 16 then avail := 16;
+      if not PeekConsoleInput(h,rec[0],avail,got) then exit;
+      for i := 0 to got-1 do
+        if KeyRecToBytes(rec[i]) <> '' then begin PollStdinMs := true; exit end;
+      if got > 0 then ReadConsoleInput(h,rec[0],got,got);
+    end
+    else begin
+      now := SysUtils.GetTickCount64;
+      if now >= deadline then exit;
+      wait := deadline - now;
+      if WaitForSingleObject(h,wait) <> WAIT_OBJECT_0 then exit;
+    end;
+  until false;
+end;
+function PollStdin: boolean;
+begin PollStdin := PollStdinMs(0) end;
+function ReadStdinByte: byte;
+var b: byte; n,avail: dword; h:THandle; rec:TInputRecord; s:string; i:integer;
+begin
+  ReadStdinByte := 0;
+  if KeyBytes = '' then begin
+    h := GetStdHandle(STD_INPUT_HANDLE);
+    if not GetNumberOfConsoleInputEvents(h,avail) then begin
+      if ReadFile(h,b,1,n,nil) and (n=1) then ReadStdinByte := b
+      else begin StdinEof := true; HangupRequested := true end;
+      exit;
+    end;
+    for i := 1 to 32 do begin
+      if not ReadConsoleInput(h,rec,1,n) or (n<>1) then exit;
+      s := KeyRecToBytes(rec);
+      if s <> '' then begin KeyBytes := s; break end;
+    end;
+    if KeyBytes = '' then exit;
+  end;
+  ReadStdinByte := byte(KeyBytes[1]);
+  delete(KeyBytes,1,1);
+end;
+procedure TermWrite(var Buf; Len:longint);
+var n:dword;
+begin if FandBatch then exit; WriteFile(GetStdHandle(STD_OUTPUT_HANDLE),Buf,Len,n,nil); TermCrsStale:=true end;
+{$endif}
+{ The terminal's cursor goes where FAND's is, shown or hidden, underline or
+  block (insert/overwrite), whenever input is awaited and it has changed. }
+var CrsSent:record X,Y:word; On,Big:boolean end;
+procedure TermCursor;
+var s:string;
+  function N(v:word):string; var r:string; begin str(v,r); N:=r end;
+begin
+  if FandBatch then exit;
+  if not TermCrsStale and (CrsSent.On=Crs.Enabled) and (CrsSent.Big=Crs.Big) and
+     (not Crs.Enabled or (CrsSent.X=Crs.X) and (CrsSent.Y=Crs.Y)) then exit;
+  if Crs.Enabled then begin
+    s:=#27'['+N(Crs.Y+1)+';'+N(Crs.X+1)+'H';
+    if Crs.Big then s:=s+#27'[1 q' else s:=s+#27'[3 q';
+    s:=s+#27'[?25h' end
+  else s:=#27'[?25l';
+  TermWrite(s[1],length(s)); TermCrsStale:=false;
+  CrsSent.X:=Crs.X; CrsSent.Y:=Crs.Y; CrsSent.On:=Crs.Enabled; CrsSent.Big:=Crs.Big;
+end;
+procedure TermCursorDone;
+const s:string[16]=#27'[0 q'#27'[?25h';
+begin if not FandBatch then TermWrite(s[1],length(s)) end;
+type TTermEnc=(teAuto,teCp852,teUtf8,teCp1250,teLat2);
+const TermEnc:TTermEnc=teAuto;
+function EncFromName(s:string):TTermEnc;
+begin
+  s:=UpperCase(s); EncFromName:=teAuto;
+  if (s='CP852') or (s='852') or (s='IBM852') then EncFromName:=teCp852
+  else if (s='UTF8') or (s='UTF-8') or (s='65001') then EncFromName:=teUtf8
+  else if (s='CP1250') or (s='1250') or (s='WINDOWS-1250') then EncFromName:=teCp1250
+  else if (s='LATIN2') or (s='ISO-8859-2') or (s='ISO8859-2') then EncFromName:=teLat2;
+end;
+function DetectTermEnc:TTermEnc;
+var s:string; e:TTermEnc; {$ifdef MSWINDOWS}cp:longint;{$endif}
+begin
+  e:=EncFromName(GetEnv('FAND_ENCODING'));
+  if e<>teAuto then begin DetectTermEnc:=e; exit end;
+{$ifdef MSWINDOWS}
+  cp:=GetConsoleOutputCP;
+  if cp=852 then DetectTermEnc:=teCp852
+  else if cp=65001 then DetectTermEnc:=teUtf8
+  else if SetConsoleOutputCP(852) then DetectTermEnc:=teCp852
+  else if cp=1250 then DetectTermEnc:=teCp1250
+  else DetectTermEnc:=teCp852;
+{$else}
+  s:=GetEnv('LC_ALL'); if s='' then s:=GetEnv('LC_CTYPE');
+  if s='' then s:=GetEnv('LANG'); s:=UpperCase(s);
+  if pos('UTF',s)>0 then DetectTermEnc:=teUtf8
+  else if (pos('8859-2',s)>0) or (pos('LATIN2',s)>0) then DetectTermEnc:=teLat2
+  else if pos('852',s)>0 then DetectTermEnc:=teCp852
+  else DetectTermEnc:=teUtf8;
+{$endif}
+end;
+function TermEncoding:TTermEnc;
+begin if TermEnc=teAuto then TermEnc:=DetectTermEnc; TermEncoding:=TermEnc end;
+function Utf8ToCp852(lead:byte):word;
+var u:longint; n,i:integer; c:byte;
+begin
+  Utf8ToCp852:=0;
+  if lead<$E0 then begin u:=lead and $1F; n:=1 end
+  else if lead<$F0 then begin u:=lead and $0F; n:=2 end
+  else begin u:=lead and $07; n:=3 end;
+  for i:=1 to n do begin
+    if not PollStdinMs(40) then exit;
+    c:=ReadStdinByte;
+    if (c and $C0)<>$80 then exit;
+    u:=(u shl 6) or (c and $3F);
+  end;
+  if u<$80 then begin Utf8ToCp852:=word(u); exit end;
+  for i:=0 to 127 do
+    if Cp852Uni[i]=word(u) then begin Utf8ToCp852:=word(i+$80); exit end;
+end;
+function ReadTermKey:word;
+const
+  FBase :array[0..3] of byte = ($3B,$54,$5E,$68);
+  F11Base:array[0..3] of byte = ($85,$87,$89,$8B);
+  AltLetter:array['A'..'Z'] of byte =
+    ($1E,$30,$2E,$20,$12,$21,$22,$23,$17,$24,$25,$26,$32,$31,$18,$19,$10,$13,$1F,$14,$16,$2F,$11,$2D,$15,$2C);
+  AltDigit:array['0'..'9'] of byte = ($81,$78,$79,$7A,$7B,$7C,$7D,$7E,$7F,$80);
+var b,b2,c:byte; K:word; params:string; p1,p2,i,code,modi:integer; final:char;
+  function Mod2Idx(m:integer):integer;
+  begin
+    case m of 2,4,6,8: Mod2Idx:=1; 5,7: Mod2Idx:=2; 3: Mod2Idx:=3; else Mod2Idx:=0 end;
+  end;
+  function FKey(n,m:integer):word;
+  begin
+    if n<=10 then FKey:=word(FBase[Mod2Idx(m)]+n-1) shl 8
+    else FKey:=word(F11Base[Mod2Idx(m)]+n-11) shl 8;
+  end;
+  function NavKey(fin:char;m:integer):word;
+  var ctrl:boolean; r:word;
+  begin
+    ctrl:=Mod2Idx(m)=2; r:=$1B;
+    case fin of
+      'A': if ctrl then r:=$8D00 else r:=$4800;
+      'B': if ctrl then r:=$9100 else r:=$5000;
+      'C': if ctrl then r:=$7400 else r:=$4D00;
+      'D': if ctrl then r:=$7300 else r:=$4B00;
+      'H': if ctrl then r:=$7700 else r:=$4700;
+      'F': if ctrl then r:=$7500 else r:=$4F00;
+    end;
+    NavKey:=r;
+  end;
+begin
+  { BP7 read Shift/Ctrl/Alt from the BIOS (KbdFlgs, Shift+arrows mark a
+    block): here they come with the key }
+  KbdFlgs := 0;
+  b := ReadStdinByte; params := ''; final := #0; b2 := 0;
+  if b >= $80 then case TermEncoding of
+    teUtf8:   if b >= $C0 then begin ReadTermKey := Utf8ToCp852(b); exit end;
+    teCp1250: begin
+                if From1250[b-$80] <> 0 then b := From1250[b-$80];
+                ReadTermKey := b; exit end;
+    teLat2:   begin
+                if FromLat2[b-$80] <> 0 then b := FromLat2[b-$80];
+                ReadTermKey := b; exit end;
+  end;
+  if b <> $1B then begin
+    if b = $0A then b := $0D;
+    if b = $7F then b := $08;
+    ReadTermKey := b; exit;
+  end;
+  if not PollStdinMs(40) then begin ReadTermKey := $1B; exit end;
+  b2 := ReadStdinByte; K := $1B;
+  if b2 = ord('[') then begin
+    repeat
+      if not PollStdinMs(40) then break;
+      c := ReadStdinByte;
+      if (chr(c) in ['0'..'9',';']) then begin if length(params)<16 then params:=params+chr(c) end
+      else begin final := chr(c); break end;
+    until false;
+    p1 := 0; p2 := 0; i := pos(';',params);
+    if i>0 then begin val(copy(params,1,i-1),p1,code); val(copy(params,i+1,255),p2,code) end
+    else val(params,p1,code);
+    modi := p2;
+    if modi >= 2 then begin                    { xterm: 1 + Shift 1, Alt 2, Ctrl 4 }
+      if (modi-1) and 1 <> 0 then KbdFlgs := KbdFlgs or $02;
+      if (modi-1) and 4 <> 0 then KbdFlgs := KbdFlgs or $04;
+      if (modi-1) and 2 <> 0 then KbdFlgs := KbdFlgs or $08 end;
+    if final = 'Z' then KbdFlgs := $02;
+    case final of
+      'A','B','C','D','H','F': K := NavKey(final,modi);
+      'P','Q','R','S': K := FKey(ord(final)-ord('P')+1,modi);
+      'Z': K := $0F00;
+      '~': case p1 of
+             1,7: if Mod2Idx(modi)=2 then K:=$7700 else K:=$4700;
+             4,8: if Mod2Idx(modi)=2 then K:=$7500 else K:=$4F00;
+             2: K:=$5200; 3: K:=$5300;
+             5: if Mod2Idx(modi)=2 then K:=$0300 else K:=$4900;
+             6: if Mod2Idx(modi)=2 then K:=$7600 else K:=$5100;
+             11..15: K := FKey(p1-10,modi);
+             17..21: K := FKey(p1-11,modi);
+             23,24:  K := FKey(p1-12,modi);
+           end;
+    end;
+  end else if b2 = ord('O') then begin
+    if PollStdinMs(40) then begin
+      c := ReadStdinByte;
+      case chr(c) of
+        'P','Q','R','S': K := FKey(c-ord('P')+1,0);
+        'A','B','C','D','H','F': K := NavKey(chr(c),0);
+      end;
+    end;
+  end else if upcase(chr(b2)) in ['A'..'Z'] then begin
+    K := word(AltLetter[upcase(chr(b2))]) shl 8; KbdFlgs := $08 end
+  else if chr(b2) in ['0'..'9'] then begin K := word(AltDigit[chr(b2)]) shl 8; KbdFlgs := $08 end
+  else if b2 = ord('=') then K := $8300
+  else if b2 = $1B then K := $1B;
+  ReadTermKey := K;
+end;
+{$I Keybd}
+const ShadowCols=255; ShadowRows=MaxTxtRows;
+      ShadowReady: boolean = false;
+      ScrResized:  boolean = false;
+      ResizeTick:  word    = 0;
+var Shadow: array[0..ShadowRows-1,0..ShadowCols-1] of word;
+procedure ShadowInit;
+var y,x:word;
+begin
+  for y:=0 to ShadowRows-1 do for x:=0 to ShadowCols-1 do Shadow[y,x]:=$0720;
+  ShadowReady:=true;
+end;
+procedure ScrSetAttr(Color:byte); begin Crt.TextAttr := Color end;
+procedure ScrGoto(X,Y:word); begin if not FandBatch then Crt.GotoXY(X+1, Y+1) end;
+procedure LoadVideoFont;
+begin end;
+{ the screen's codes below $20 (and $7F) are pictures in the DOS font -
+  arrows, triangles, the Enter mark - but controls to a terminal }
+const LowGlyph:array[0..31] of word=(
+  $0020,$263A,$263B,$2665,$2666,$2663,$2660,$2022,$25D8,$25CB,$25D9,$2642,
+  $2640,$266A,$266B,$263C,$25BA,$25C4,$2195,$203C,$00B6,$00A7,$25AC,$21A8,
+  $2191,$2193,$2192,$2190,$221F,$2194,$25B2,$25BC);
+      LowAscii:string[32]=' ****o*.o0oMF##*><|!PS-|^v><L-^v';
+procedure TermEmit(X,Y:word; Attr:byte; const S:string);
+const DosToAnsi: array[0..7] of byte = (0,4,2,6,1,5,3,7);
+var buf:array[0..2047] of byte; cnt,i:integer; c:byte; u:word;
+  procedure PutS(const t:string);
+  var k:integer;
+  begin for k:=1 to length(t) do begin buf[cnt]:=ord(t[k]); inc(cnt) end end;
+  function NumS(v:word):string; var r:string; begin str(v,r); NumS:=r end;
+begin
+  if length(S)=0 then exit;
+  cnt:=0;
+  PutS(#27'['+NumS(Y+1)+';'+NumS(X+1)+'H'+#27'[0;');
+  if Attr and 8<>0 then PutS(NumS(90+DosToAnsi[Attr and 7]))
+                   else PutS(NumS(30+DosToAnsi[Attr and 7]));
+  PutS(';'+NumS(40+DosToAnsi[(Attr shr 4) and 7])+'m');
+  case TermEncoding of
+   teCp852,teCp1250,teLat2:
+     for i:=1 to length(S) do begin
+       c:=ord(S[i]);
+       if c<$20 then c:=ord(LowAscii[c+1])
+       else if c=$7F then c:=ord('^')
+       else if c>=$80 then
+         if TermEncoding=teCp1250 then c:=Cp852To1250[c-$80]
+         else if TermEncoding=teLat2 then c:=Cp852ToLat2[c-$80];
+       buf[cnt]:=c; inc(cnt);
+     end;
+   else
+     for i:=1 to length(S) do begin
+       c:=ord(S[i]);
+       if (c>=$20) and (c<$7F) then begin buf[cnt]:=c; inc(cnt) end
+       else begin
+         if c<$20 then u:=LowGlyph[c] else if c=$7F then u:=$2302
+         else u:=Cp852Uni[c-$80];
+         if u<$80 then begin buf[cnt]:=u; inc(cnt) end
+         else if u<$800 then begin
+           buf[cnt]:=$C0 or (u shr 6); buf[cnt+1]:=$80 or (u and $3F); inc(cnt,2)
+         end else begin
+           buf[cnt]:=$E0 or (u shr 12);
+           buf[cnt+1]:=$80 or ((u shr 6) and $3F);
+           buf[cnt+2]:=$80 or (u and $3F); inc(cnt,3)
+         end;
+       end;
+       if cnt>2040 then begin TermWrite(buf,cnt); cnt:=0 end;
+     end;
+  end;
+  if cnt>0 then TermWrite(buf,cnt);
+end;
+{$ifdef UNIX}
+var FandTio:Termios;
+{$endif}
+const FandTtySaved:boolean=false;
+procedure TtyForChild(const Msg:string);
+var t:string;
+begin
+  FandTtySaved:=false;
+  if FandBatch {$ifdef UNIX}or (IsATTY(0)=0){$endif} then exit;
+  {$ifdef UNIX}if TCGetAttr(0,FandTio)<>0 then exit;{$endif}
+  t:=#27'[0m'#27'[?25h'#27'[0 q'; if Msg<>'' then t:=t+#27'[H'#27'[2J';
+  TermWrite(t[1],length(t));
+  if Msg<>'' then begin TermEmit(0,0,$07,Msg); t:=#13#10; TermWrite(t[1],2) end;
+  {$ifdef UNIX}SysUtils.ExecuteProcess('/bin/stty','sane');{$else}RestoreTty;{$endif}
+  FandTtySaved:=true;
+end;
+procedure TtyForFand;
+begin
+  if not FandTtySaved then exit; FandTtySaved:=false;
+  {$ifdef UNIX}TCSetAttr(0,TCSANOW,FandTio);{$else}RawTtyTried:=false; EnsureRawTty;{$endif}
+  TermCrsStale:=true; ScrRepaintAll;
+end;
+procedure ScrWrBufRaw(X,Y:word;var Buf;L:word);
+type TBufArr = array[0..65534] of word;
+var i,j:word; pw:^TBufArr; attr:byte; s:string;
+begin
+  if L=0 then exit;
+  pw := @Buf; i:=0;
+  while i<L do begin
+    attr:=hi(pw^[i]); j:=i; s:='';
+    while (j<L) and (hi(pw^[j])=attr) and (length(s)<200) do begin
+      s:=s+char(lo(pw^[j])); inc(j) end;
+    TermEmit(X+i, Y, attr, s);
+    i:=j;
+  end;
+end;
+procedure ScrWrBuf(X,Y:word;var Buf;L:word);
+type TBufArr = array[0..65534] of word;
+var i,j:word; pw:^TBufArr; attr:byte; s:string;
+begin
+  if L=0 then exit;
+  if not ShadowReady then ShadowInit;
+  if (Y>=TxtRows) or (X>=TxtCols) then exit;
+  if X+L>TxtCols then L:=TxtCols-X;
+  pw := @Buf; i:=0;
+  while i<L do begin
+    attr:=hi(pw^[i]); j:=i; s:='';
+    while (j<L) and (hi(pw^[j])=attr) and (length(s)<200) do begin
+      s:=s+char(lo(pw^[j]));
+      if (Y<ShadowRows) and (X+j<ShadowCols) then Shadow[Y,X+j]:=pw^[j];
+      inc(j) end;
+    TermEmit(X+i, Y, attr, s);
+    i:=j;
+  end;
+end;
+procedure ScrRepaintAll;
+var y,x:word; row:array[0..ShadowCols-1] of word;
+begin
+  if not ShadowReady then begin ShadowInit; exit end;
+  for y:=0 to TxtRows-1 do begin
+    for x:=0 to TxtCols-1 do row[x]:=Shadow[y,x];
+    ScrWrBufRaw(0,y,row,TxtCols);
+  end;
+end;
+procedure ScrClr(X,Y,SizeX,SizeY:word;C:char;Color:byte);
+var j,i:word; buf:array[0..ShadowCols-1] of word;
+begin
+  if (SizeX=0) or (SizeY=0) then exit;
+  if SizeX>ShadowCols then SizeX:=ShadowCols;
+  for i:=0 to SizeX-1 do buf[i]:=word(Color) shl 8 or ord(C);
+  for j := 0 to SizeY-1 do ScrWrBuf(X,Y+j,buf,SizeX);
+end;
+procedure ScrWrChar(X,Y:word;C:char;Color:byte);
+var w:word;
+begin w:=word(Color) shl 8 or ord(C); ScrWrBuf(X,Y,w,1) end;
+procedure ScrWrStr(X,Y:word;const S:string;Color:byte);
+var buf:array[0..255] of word; i:word;
+begin
+  if length(S)=0 then exit;
+  for i:=1 to length(S) do buf[i-1]:=word(Color) shl 8 or ord(S[i]);
+  ScrWrBuf(X,Y,buf,length(S));
+end;
+procedure ScrWrFrameLn(X,Y:word;Typ,Width,Color:byte);
+var s:string;
+begin
+  s[0]:=char(Width); s[1]:=FrameChars[Typ]; s[Width]:=FrameChars[Typ+2];
+  FillChar(s[2],Width-2,FrameChars[Typ+1]); ScrWrStr(X,Y,s,Color);
+end;
+procedure ScrRdBuf(X,Y:word;var Buf;L:word);
+type TBufArr = array[0..65534] of word;
+var i:word; pw:^TBufArr;
+begin
+  if L=0 then exit;
+  if not ShadowReady then ShadowInit;
+  pw := @Buf;
+  for i := 0 to L-1 do
+    if (Y<ShadowRows) and (X+i<ShadowCols) then pw^[i]:=Shadow[Y,X+i]
+    else pw^[i] := $0720;
+end;
+procedure ScrPush1(X,Y,SizeX,SizeY:word;P:pointer);
+type TBufArr = array[0..65534] of word;
+var pw:^TBufArr; j:word;
+begin
+  pw := P; pw^[0] := SizeX; pw^[1] := SizeY;
+  if (SizeX=0) or (SizeY=0) then exit;
+  for j := 0 to SizeY-1 do ScrRdBuf(X,Y+j,pw^[2+j*SizeX],SizeX);
+end;
+function ScrPush(X,Y,SizeX,SizeY:word):pointer;
+var p:pointer;
+begin p := GetStore(SizeX*SizeY*2+4); ScrPush := p; ScrPush1(X,Y,SizeX,SizeY,p) end;
+procedure ScrPop(X,Y:word;P:pointer);
+type TBufArr = array[0..65534] of word;
+var pw:^TBufArr; SizeX,SizeY:word; j:word;
+begin
+  pw := P; SizeX := pw^[0]; SizeY := pw^[1];
+  if (SizeX=0) or (SizeY=0) then exit;
+  if (SizeX>TxtCols) or (SizeY>TxtRows) or (X>=TxtCols) or (Y>=TxtRows) then exit;
+  for j := 0 to SizeY-1 do ScrWrBuf(X,Y+j,pw^[2+j*SizeX],SizeX);
+end;
+procedure ScrPopToGraph(X,Y,SizeX,SizeY:word;P:pointer;DOfs:word);
+begin end;
+procedure ScrMove(X,Y,ToX,ToY,L:word);
+var buf: array[0..ShadowCols-1] of word;
+begin if L > ShadowCols then L := ShadowCols; ScrRdBuf(X,Y,buf,L); ScrWrBuf(ToX,ToY,buf,L) end;
+procedure ScrColor(X,Y,L:word;Color:byte);
+var buf: array[0..ShadowCols-1] of word; i: word;
+begin
+  if L > ShadowCols then L := ShadowCols;
+  if L=0 then exit;
+  ScrRdBuf(X,Y,buf,L);
+  for i := 0 to L-1 do buf[i] := word(Color) shl 8 or lo(buf[i]);
+  ScrWrBuf(X,Y,buf,L);
+end;
+procedure CrsShow; begin Crs.Enabled := true end;
+procedure CrsHide; begin Crs.Enabled := false end;
+procedure CrsBig; begin Crs.Big := true; CrsShow end;
+procedure CrsNorm; begin Crs.Big := false; CrsShow end;
+{ as in BP7: Big, Enabled, X, Y in the four bytes }
+function CrsGet:longint;
+begin
+  CrsGet := ord(Crs.Big) or (ord(Crs.Enabled) shl 8) or
+            (longint(Crs.X and $FF) shl 16) or (longint(Crs.Y and $FF) shl 24);
+end;
+procedure CrsSet(S:longint);
+begin
+  CrsHide;
+  Crs.Big := (S and $FF)<>0;
+  Crs.X := (S shr 16) and $FF;
+  Crs.Y := (S shr 24) and $FF;
+  if not FandBatch then Crt.GotoXY(Crs.X+1, Crs.Y+1);
+  if (S shr 8) and $FF<>0 then CrsShow;
+end;
+procedure CrsIntrInit; begin end;
+procedure CrsIntrDone; begin end;
+procedure GotoXY(X,Y:byte);
+var AX,AY: word;
+begin
+  AX := word(X)-1 + WindMin.X;
+  AY := word(Y)-1 + WindMin.Y;
+  if AX > WindMax.X then AX := WindMin.X;
+  if AY > WindMax.Y then AY := WindMin.Y;
+  Crs.X := AX; Crs.Y := AY;
+  if not FandBatch then Crt.GotoXY(AX+1, AY+1);
+end;
+function WhereX:byte;
+begin WhereX := Crs.X - WindMin.X + 1 end;
+function WhereY:byte;
+begin WhereY := Crs.Y - WindMin.Y + 1 end;
+procedure Window(X1,Y1,X2,Y2:byte);
+begin
+  if (X1>X2) or (Y1>Y2) then exit;
+  if (X1<1) or (Y1<1) then exit;
+  if (X2>TxtCols) or (Y2>TxtRows) then exit;
+  WindMin.X := X1-1; WindMin.Y := Y1-1;
+  WindMax.X := X2-1; WindMax.Y := Y2-1;
+  Crs.X := WindMin.X; Crs.Y := WindMin.Y;
+  if not FandBatch then Crt.GotoXY(X1, Y1);
+end;
+procedure ClrScr;
+begin
+  ScrClr(WindMin.X, WindMin.Y,
+         WindMax.X-WindMin.X+1, WindMax.Y-WindMin.Y+1,
+         ' ', TextAttr);
+  Crs.X := WindMin.X; Crs.Y := WindMin.Y;
+  if not FandBatch then Crt.GotoXY(WindMin.X+1, WindMin.Y+1);
+end;
+procedure ClrEol; begin ScrClr(Crs.X, Crs.Y, WindMax.X-Crs.X+1, 1, ' ', TextAttr) end;
+procedure Scroll(X,Y,SizeX,SizeY:word;Up:boolean);
+begin
+  if Up then
+    ScrClr(X, Y+SizeY-1, SizeX, 1, ' ', TextAttr)
+  else
+    ScrClr(X, Y, SizeX, 1, ' ', TextAttr);
+end;
+procedure InsLine;
+begin Scroll(WindMin.X, Crs.Y, WindMax.X-WindMin.X+1, WindMax.Y-Crs.Y+1, false) end;
+procedure DelLine;
+begin Scroll(WindMin.X, Crs.Y, WindMax.X-WindMin.X+1, WindMax.Y-Crs.Y+1, true) end;
+procedure TextBackGround(Color:byte);
+begin TextAttr := (TextAttr and $0F) or ((Color and $07) shl 4); Crt.TextAttr := TextAttr end;
+procedure TextColor(Color:byte);
+begin TextAttr := (TextAttr and $F0) or (Color and $0F); Crt.TextAttr := TextAttr end;
+procedure Delay(N:word); begin SysUtils.Sleep(N * 55) end;
+procedure Sound(N:word);
+begin end;
+procedure NoSound;
+begin end;
+procedure Beep;
+begin system.Write(^G) end;
+procedure LockBeep;
+begin if spec.LockBeepAllowed then Beep end;
+procedure ScrBeep;
+const bell:char=#7;
+begin if spec.Beep then TermWrite(bell, 1) end;
+procedure InitMouseEvents;
+begin
+  MausExist := false;
+  Event.What := 0;
+  MouseButtons := 0; LastButtons := 0; DownButtons := 0;
+  LastDouble := 0; EventCount := 0;
+  EventQHead := 0; EventQTail := 0;
+end;
+procedure DoneMouseEvents; begin end;
+procedure ShowMouse; begin end;
+procedure HideMouse; begin end;
+procedure ShowMaus; begin end;
+procedure HideMaus; begin end;
+procedure GetMouseEvent; begin Event.What:=0 end;
+procedure SetMouse(X,Y:word;Visible:boolean); begin end;
+procedure GetKeyEvent;
+var K: word; L: byte;
+begin
+  Event.What := 0;
+  BreakCheck;
+  L := ord(KbdBuffer[0]);
+  if L > 0 then begin
+    K := ord(KbdBuffer[1]);
+    if (K = 0) and (L > 1) then begin
+      K := word(ord(KbdBuffer[2])) shl 8; Delete(KbdBuffer,1,2) end
+    else Delete(KbdBuffer,1,1);
+    if K = $0300 then K := 0
+    else if K = $8400 then K := $0300;
+  end else begin
+    EnsureRawTty;
+    if not PollStdin then exit;
+    K := ReadTermKey;
+  end;
+  Event.What := evKeyDown;
+  Event.KeyCode := K;
+  KbdChar := K;
+end;
+procedure GetMouseKeyEvent; begin GetMouseEvent; if Event.What = 0 then GetKeyEvent end;
+procedure TestGlobalKey;
+var i:word;
+const InMenu6:boolean=false; const InMenu8:boolean=false;
+begin
+  if Event.What=evKeyDown then case Event.KeyCode of
+     _AltF8_:if not InMenu8 then begin ClrEvent; InMenu8:=true;
+             i:=Menu(45,ord(spec.KbdTyp)+1);
+             if i<>0 then spec.KbdTyp:=TKbdConv(i-1); InMenu8:=false end;
+     _AltF6_:if not InMenu6 then begin
+             ClrEvent; InMenu6:=true; PrinterMenu(46); InMenu6:=false end;
+     _ESC_:  if LLKeyFlags<>0 then begin LLKeyFlags:=0; ClrEvent end;
+  end;
+end;
+function AddCtrlAltShift(Flgs:byte):word;
+begin
+  if Event.What <> evKeyDown then begin AddCtrlAltShift:=0; exit end;
+  if (Flgs and $04)<>0 then begin
+    case Event.KeyCode of
+      _Home_: Event.KeyCode:=_CtrlHome_;
+      _End_:  Event.KeyCode:=_CtrlEnd_;
+      ord('Y'): Event.KeyCode:=_Y_;
+    end;
+  end;
+  if Event.KeyCode >= _F1_ then begin
+    if (Flgs and $04)<>0 then inc(Event.KeyCode, _CtrlF1_-_F1_)
+    else if (Flgs and $08)<>0 then inc(Event.KeyCode, _AltF1_-_F1_)
+    else if (Flgs and $03)<>0 then inc(Event.KeyCode, _ShiftF1_-_F1_);
+  end;
+  TestGlobalKey;
+  AddCtrlAltShift := 0;
+end;
+function TestEvent:boolean;
+label 1;
+begin
+1:if Event.What=0 then GetMouseKeyEvent;
+  if Event.What=0 then GetKeyEvent;
+  if Event.What=0 then TestEvent:=false
+  else begin TestGlobalKey; if Event.What=0 then goto 1; TestEvent:=true end;
+end;
+function TermSize(var Cols,Rows:word):boolean;
+{$ifdef UNIX}
+var w:TWinSize;
+begin
+  TermSize:=false;
+  if (fpIOCtl(1,TIOCGWINSZ,@w)<>0) and (fpIOCtl(0,TIOCGWINSZ,@w)<>0)
+     and (fpIOCtl(2,TIOCGWINSZ,@w)<>0) then exit;
+  if (w.ws_col=0) or (w.ws_row=0) then exit;
+  if w.ws_col>Cols then Cols:=w.ws_col;
+  if w.ws_row>Rows then Rows:=w.ws_row;
+  TermSize:=true;
+end;
+{$else}
+var info:TConsoleScreenBufferInfo;
+begin
+  TermSize:=false;
+  if not GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE),info) then exit;
+  if info.srWindow.Right>=info.srWindow.Left+79 then
+    Cols:=info.srWindow.Right-info.srWindow.Left+1;
+  if info.srWindow.Bottom>=info.srWindow.Top+24 then
+    Rows:=info.srWindow.Bottom-info.srWindow.Top+1;
+  TermSize:=true;
+end;
+{$endif}
+{$ifdef UNIX}
+procedure WinchHandler(sig:longint); cdecl;
+begin ScrResized:=true end;
+procedure HangupHandler(sig:longint); cdecl;
+begin HangupRequested:=true end;
+{$endif}
+procedure InstallWinch;
+begin
+{$ifdef UNIX}
+  fpSignal(SIGWINCH,SignalHandler(@WinchHandler));
+  if not FandBatch then begin    { batch runs never wait for keys: let them die }
+    fpSignal(SIGHUP,SignalHandler(@HangupHandler));
+    fpSignal(SIGTERM,SignalHandler(@HangupHandler)) end;
+{$endif}
+end;
+procedure PollResize;
+{$ifdef MSWINDOWS}
+var c,r:word;
+begin
+  inc(ResizeTick);
+  if ResizeTick < 8 then exit;
+  ResizeTick := 0;
+  c:=80; r:=25;
+  if TermSize(c,r) then begin
+    if c>MaxTxtCols then c:=MaxTxtCols;
+    if r>MaxTxtRows then r:=MaxTxtRows;
+    if (c<>TxtCols) or (r<>TxtRows) then ScrResized:=true end;
+end;
+{$else}
+begin end;
+{$endif}
+procedure ApplyResize;
+var c,r:word;
+begin
+  ScrResized:=false;
+  c:=80; r:=25;
+  if not TermSize(c,r) then exit;
+  if c>MaxTxtCols then c:=MaxTxtCols;
+  if r>MaxTxtRows then r:=MaxTxtRows;
+  if (c=TxtCols) and (r=TxtRows) then begin ScrRepaintAll; exit end;
+  TxtCols:=c; TxtRows:=r;
+  WindMax.X:=c-1; WindMax.Y:=r-1;
+  ScrRepaintAll;
+end;
+procedure CheckHangup;
+begin
+  if HangupRequested then begin
+    { no keys and no screen from here on: a message while closing gets Esc }
+    HangupRequested := false; FandBatch := true;
+    if @HangupProc <> nil then HangupProc;
+    halt(1) end;
+end;
+procedure IdleTick(Ms:word);
+begin
+  if not FandBatch then PollStdinMs(Ms);
+  Timer := longint(SysUtils.GetTickCount64 div 55);
+  CheckHangup;
+end;
+function WaitEvent(Delta:word):word;
+var t:longint; Flgs:byte; idle:boolean;
+begin
+  Flgs := KbdFlgs;
+  Timer := longint(SysUtils.GetTickCount64 div 55);
+  t := Timer;
+  repeat
+    Timer := longint(SysUtils.GetTickCount64 div 55);
+    CheckHangup;
+    if ScrResized then ApplyResize;
+    if Event.What=0 then GetMouseKeyEvent;
+    if Event.What=0 then GetKeyEvent;
+    if (Event.What=0) and FandBatch then begin
+      Event.What:=evKeyDown; Event.KeyCode:=_ESC_ end;
+    if Event.What <> 0 then begin WaitEvent:=0; TestGlobalKey; exit end;
+    { a terminal says nothing while a key is just held: no stale flags }
+    if (Delta<>0) and (Timer > t+Delta) then begin KbdFlgs:=0; WaitEvent:=2; exit end;
+    TermCursor;
+    idle := PollStdinMs(20);
+    PollResize;
+  until false;
+end;
+procedure GetEvent;
+begin repeat WaitEvent(0) until Event.What<>0 end;
+procedure ClrEvent;
+begin Event.What:=0 end;
+function KbdPressed:boolean;
+begin
+  KbdPressed:=true;
+  if length(KbdBuffer)>0 then exit;
+  if PollStdin then exit;
+  Event.What:=0; GetMouseKeyEvent;
+  if Event.What=evKeyDown then begin
+    AddToKbdBuf(Event.KeyCode); ClrEvent; exit end;
+  KbdPressed:=false;
+end;
+function ESCPressed:boolean;
+begin
+  ESCPressed:=true;
+  if PollStdin then begin
+    if ReadKey=_ESC_ then exit end
+  else begin
+    GetMouseKeyEvent;
+    if Event.What=evKeyDown then begin
+      if Event.KeyCode=_ESC_ then begin ClrEvent; exit end end;
+    ClrEvent end;
+  ESCPressed:=false;
+end;
+function ReadKbd:word;
+begin
+  while Event.What<>evKeyDown do begin ClrEvent; GetEvent end;
+  ReadKbd:=Event.KeyCode; KbdChar:=Event.KeyCode; ClrEvent;
+end;
+{$ifdef Trial}
+function getSec:longint;
+var h,m,s,ss:word; begin getTime(h,m,s,ss); getSec:=h*3600+m*60+s; end;
+procedure TestTrial;
+var now:longint;
+begin
+  if (trialStartFand=0) then begin trialStartFand:=getSec; trialInterval:=900 end
+  else begin now:=getSec;
+    if now>trialStartFand+trialInterval then begin
+      trialStartFand:=now; trialInterval:=trialInterval div 3;
+      if trialInterval<10 then trialInterval:=10;
+      WrLLF10Msg(71) end end;
+end;
+{$endif}
+procedure BreakIntrInit; begin end;
+procedure BreakIntrDone; begin end;
+procedure ConLineFeed;
+var y,w:word;
+begin
+  if Crs.Y<WindMax.Y then inc(Crs.Y)
+  else if WindMax.Y>WindMin.Y then begin
+    w:=WindMax.X-WindMin.X+1;
+    for y:=WindMin.Y to WindMax.Y-1 do ScrMove(WindMin.X,y+1,WindMin.X,y,w);
+    ScrClr(WindMin.X,WindMax.Y,w,1,' ',TextAttr);
+  end;
+end;
+function WrOutput(var F:TextRec):integer;
+var i:longint; c:char; s:string; e:ansistring;
+  procedure FlushS;
+  begin if length(s)=0 then exit; ScrWrStr(Crs.X,Crs.Y,s,TextAttr); inc(Crs.X,length(s)); s:='' end;
+begin
+  if FandBatch then begin
+    if not BatchQuiet then begin
+      e:=''; for i:=0 to longint(F.BufPos)-1 do e:=e+F.BufPtr^[i];
+      write(StdErr,S852ToUtf8(e)) end;
+    F.BufPos:=0; WrOutput:=0; exit end;
+  s:='';
+  for i:=0 to longint(F.BufPos)-1 do begin
+    c:=F.BufPtr^[i];
+    case c of
+      #7: begin FlushS; ScrBeep end;
+      #8: begin FlushS; if Crs.X>WindMin.X then dec(Crs.X) end;
+      #10: begin FlushS; ConLineFeed end;
+      #13: begin FlushS; Crs.X:=WindMin.X end;
+    else begin
+      s:=s+c;
+      if Crs.X+length(s)-1>=WindMax.X then begin FlushS; Crs.X:=WindMin.X; ConLineFeed end
+      else if length(s)=200 then FlushS;
+    end end;
+  end;
+  FlushS; F.BufPos:=0;
+  if not FandBatch then Crt.GotoXY(Crs.X+1,Crs.Y+1);
+  WrOutput:=0;
+end;
+function DummyCrt(var F:TextRec):integer;
+begin DummyCrt:=0 end;
+function OpenCrt(var F:TextRec):integer;
+begin F.InOutFunc:=@WrOutput; F.FlushFunc:=@WrOutput; F.CloseFunc:=@DummyCrt; OpenCrt:=0 end;
+procedure AssignCrt(var T:text);
+var F:TextRec absolute T;
+begin
+  FillChar(F,sizeof(F),0);
+  F.Mode:=fmClosed; F.BufSize:=sizeof(F.Buffer); F.BufPtr:=@F.Buffer;
+  F.OpenFunc:=@OpenCrt; F.Name[0]:=#0;
+  F.LineEnd:=#13#10;
+end;
+begin
+  FandBatch:=(copy(ParamStr(2),1,2)='--') or (ParamStr(1)='--help');
+  {$ifdef UNIX}
+  { the Crt unit made the terminal raw before FAND knew it runs a batch:
+    its messages would stair-step; Crt restores the user's setting at exit }
+  if FandBatch and (IsATTY(1)=1) then SysUtils.ExecuteProcess('/bin/stty','sane');
+  {$endif}
+  { the terminal set up before any output (Windows: VT processing, which
+    the first screen needs) and its restore armed now, so that it runs
+    after Base's MyExit has cleared the screen - exit procedures run last
+    armed first }
+  if not FandBatch then EnsureRawTty;
+{$else}
 {$S-}
 
 const
@@ -842,4 +1824,5 @@ begin with F do begin
   OpenFunc:=@OpenCrt; Name[0]:=#0;
 end end;
 
+{$endif}
 end.

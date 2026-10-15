@@ -7,7 +7,9 @@ function MyGetEvent:boolean;
       type BP=^byte;
       var old,fyz:boolean;
           L1:longint;
-      begin old:=Scroll;fyz:=((BP(ptr(0,$417))^ and $10)<>0);
+      begin old:=Scroll;
+        {$ifdef FPC}fyz:=false;
+        {$else}fyz:=((BP(ptr(0,$417))^ and $10)<>0);{$endif}
         if fyz=old then FirstScroll:=false;
         Scroll:=(fyz or FirstScroll)and(Mode<>HelpM);
         HelpScroll:=Scroll or(Mode=HelpM);L1:=LineAbs(ScrL);

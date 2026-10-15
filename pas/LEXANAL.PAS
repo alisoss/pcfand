@@ -87,7 +87,7 @@ begin
 end;
 const Dirs:array[0..5] of string[7]=
      ('define','ifdef','ifndef','else','endif','include');
-var i,j:word; s:string[12]; r:RdbDPtr; res:boolean;
+var i,j:word; s:string{$ifndef FPC}[12]{$endif}; r:RdbDPtr; res:boolean;
 label 1;
 begin
   ReadChar; RdForwName(s);
@@ -105,7 +105,7 @@ begin
       if i=2 then b:=not b; i:=1 end end
   else if i=5 then begin
     while ForwChar=' ' do ReadChar; RdForwName(s);
-    r:=CRdb; if (PtrRec(InpRdbPos.R).Seg<>0) then CRdb:=InpRdbPos.R;
+    r:=CRdb; if {$ifdef FPC}(InpRdbPos.R<>nil){$else}(PtrRec(InpRdbPos.R).Seg<>0){$endif} then CRdb:=InpRdbPos.R;
     res:=FindChpt('I',s,false,ChptIPos); CRdb:=r;
     if not res then Error(37) end;
   if ForwChar<>'}' then Error(158); ReadChar; RdDirective:=i;
@@ -138,10 +138,11 @@ begin
   CC:=CurrChar;
 1:case ForwChar of
    ^z:if PrevCompInp<>nil then begin
-        ci:=PrevCompInp; move(ci^.ChainBack,PrevCompInp,sizeof(CompInpD));
+        ci:=PrevCompInp;
+        {$ifdef FPC}LoadCompInp(ci){$else}move(ci^.ChainBack,PrevCompInp,sizeof(CompInpD)){$endif};
         if CurrPos<=InpArrLen then ForwChar:=InpArrPtr^[CurrPos];
         goto 1 end;
-   ^@..' ':
+   {$ifdef FPC}^@..#$19,#$1B..' '{$else}^@..' '{$endif}:
        if toNextLine and (ForwChar=^m) then begin
          ReadChar; if ForwChar=^j then ReadChar end
        else begin ReadChar; goto 1 end;
@@ -151,7 +152,7 @@ begin
             0:;
             1:begin inc(SwitchLevel); if not b then SkipLevel(true) end;
             5:begin ci:=GetStore2(sizeof(CompInpD));
-               move(PrevCompInp,ci^,sizeof(CompInpD));
+               {$ifdef FPC}SaveCompInp(ci){$else}move(PrevCompInp,ci^,sizeof(CompInpD)){$endif};
                PrevCompInp:=ci; SetInpTT(ChptIPos,true) end;
             else if SwitchLevel=0 then Error(159);
                if n=3 then SkipLevel(false) else dec(SwitchLevel) end;
@@ -236,11 +237,16 @@ procedure TestIdentif;
   begin if Lexem<>_identifier then Error(29) end;
 procedure TestLex(X:char);
   begin if Lexem<>X then begin ExpChar:=X;Error(1) end end;
+{$ifdef FPC}
+procedure Accept(X:char);
+begin if Lexem<>X then begin ExpChar:=X; Error(1) end; RdLex; end;
+{$else}
 procedure Accept(X:char); assembler;
 asm  mov al,X; cmp al,Lexem; je @1;
      mov ExpChar,al; mov ax,1; push ax; call Error;
 @1:  call RdLex;
 end;
+{$endif}
 {$S+}
 function RdInteger:integer;
   var I,J:integer;
@@ -271,6 +277,18 @@ begin
     RdLex; TestLex(_number); S:=S+LexWord end;
   RdLex; ValofS(S);
 end;
+{$ifdef FPC}
+function EquUpcase(const S:string):boolean;
+begin EquUpcase:=SEquUpcase(LexWord,S); end;
+function TestKeyWord(const S:string):boolean;
+  begin TestKeyWord:=(Lexem=_identifier)and EquUpcase(S) end;
+function IsKeyWord(const S:string):boolean;
+begin
+  if Lexem<>_identifier then begin IsKeyWord:=false; exit end;
+  if not SEquUpcase(LexWord,S) then begin IsKeyWord:=false; exit end;
+  RdLex; IsKeyWord:=true;
+end;
+{$else}
 function EquUpcase(const S:string):boolean; assembler;
 asm  lea si,LexWord; les di,S; cld; xor ch,ch; mov cl,[si]; cmpsb; jnz @3;
      jcxz @2; xor bh,bh;
@@ -290,9 +308,17 @@ asm  cmp Lexem,_identifier; jne @3;
 @2:  call RdLex; mov ax,1; jmp @4;
 @3:  xor ax,ax;
 @4:  end;
+{$endif}
 procedure AcceptKeyWord(const S:string);
   begin if TestKeyWord(S) then RdLex else
         begin SetMsgPar(S);Error(33) end end;
+{$ifdef FPC}
+function IsOpt(const S:string):boolean;
+begin
+  if (Lexem<>_identifier) or not SEquUpcase(LexWord,S) then begin IsOpt:=false; exit end;
+  RdLex; Accept(_equ); IsOpt:=true;
+end;
+{$else}
 function IsOpt(const S:string):boolean; assembler; {S=uppercase}
 asm  cmp Lexem,_identifier; jne @3;
      lea si,LexWord; les di,S; cld; xor ch,ch; mov cl,[si]; cmpsb; jnz @3;
@@ -302,6 +328,7 @@ asm  cmp Lexem,_identifier; jne @3;
 @2:  call RdLex; mov ax,_equ; push ax; call Accept; mov ax,1; jmp @4;
 @3:  xor ax,ax;
 @4:  end;
+{$endif}
 function IsDigitOpt(const S:string;var N:word):boolean;
 begin
   if (Lexem=_identifier) and (length(Lexword)=length(S)+1) and

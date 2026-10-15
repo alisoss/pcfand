@@ -1,0 +1,10 @@
+{ Hello World for PC FAND: a menu bar with one pull-down menu and an
+  About box. Esc on the menu bar ends the task. }
+begin
+  menubar of
+    'Hello': menu pulldown of
+               'World': proc(World);
+             end;
+    'About': proc(About);
+  end;
+end;

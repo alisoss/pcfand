@@ -1,0 +1,121 @@
+PC FAND 4.2x - Free Pascal port
+===============================
+
+PC FAND built with Free Pascal for 64-bit macOS, Linux and Windows. The
+original Borland Pascal 7 (DOS) code stays beside the port under
+`{$ifndef FPC}`: BP7 compiles these sources, `BPC -CD -$P+ FAND.PAS` (open
+string parameters, as the original IDE settings had them), into code that
+does what the original BP7 source does. As with that source, the result
+needs ALIS's modified BP7 runtime libraries, never published, to run. BP7
+reads at most 127 characters of a line, skipped ones included.
+
+
+Building
+--------
+
+FPC 3.2.2 or newer (`brew install fpc`, or the distribution's package).
+
+    tools/build.sh           # -> bin/fand, bin/FAND.RES, bin/FAND.CFG
+    tools/build.sh -gl       # with line info
+
+which is `cd pas && fpc -Mtp -B FAND.PAS` plus the copies, and building the
+sample task. Warnings are expected.
+
+    tools/win-build.sh       # -> bin/fand.exe (x86_64-win64)
+
+needs Docker: tools/win-cross.Dockerfile builds an FPC cross-compiler once.
+fand.exe needs only FAND.RES and FAND.CFG beside it.
+
+    tools/package.sh macos-arm64   # -> build/dist/pcfand-<version>-macos-arm64.tar.gz
+
+adds the help (FANDHLP) and the docs. .github/workflows/build.yml does all
+of this on GitHub for linux-x86_64, linux-aarch64, macos-arm64 and
+windows-x86_64; pushing a v* tag attaches the archives to that release.
+macOS quarantines a downloaded fand: `xattr -d com.apple.quarantine fand`.
+
+
+Running a task
+--------------
+
+A task is a directory with its RDB, catalogue and data files. Run fand
+from it, with the task name (the RDB's name):
+
+    cd /path/to/TASK && /path/to/pcfand/bin/fand task
+
+FAND.RES and FAND.CFG are found in $FANDRES / $FANDCFG, else the task
+directory, else beside the binary, else on the PATH.
+
+Keep the task directory short: the catalogue stores paths in 79 characters,
+and a longer one is refused at start-up (`cesta je příliš dlouhá pro
+katalog`). On macOS, a process started by a tool without access to
+~/Documents (tmux, say) gets an empty working directory there and reports
+`can't open /Fand.Res`.
+
+The sample tasks in examples/ are kept as sources; tools/build.sh builds
+them. examples/hello is a Hello > World menu and an About dialog;
+examples/invoices is a small invoicing system with every kind of chapter
+(see its README.md; log in as admin or clerk):
+
+    cd examples/hello && ../../bin/fand hello
+
+FAND paints in CP852 and translates at the terminal: UTF-8, CP852, CP1250 or
+Latin-2, from the locale on Unix and the console code page on Windows, or
+FAND_ENCODING=utf8|cp852|cp1250|latin2. The screen follows the terminal
+size, up to 132x100; FAND_SIZE=COLSxROWS fixes it.
+
+A task's EXEC runs DOS commands and .BAT files inside the binary (FANDDOS:
+the builtins, redirects, masks, goto, if, %1..%9); anything else goes to
+/bin/sh or cmd.exe. On Unix, FAND_DRIVE_X=<dir> maps DOS drive X: (default:
+the parent of the task directory); Windows uses its real drives. A printer entry marked as a print manager spools
+the report and runs the manager; when that cannot run, the report becomes
+a PDF (FANDPDF) and FAND_PRINT=open|lpr|none says what then happens to it,
+FAND_PRINTER naming the lpr queue. Other printers spool to LPT<n>.PRN.
+
+
+Batch operations
+----------------
+
+    fand TASK --source-in DIR     (re)create the task's chapters from DIR
+    fand TASK --source-out DIR    write the chapters into DIR
+
+Nothing is painted, a key wait is answered Esc, a yes/no question No, and
+messages go to stderr. Exit code 0 is success, 1 failure, 2 warnings.
+
+Chapters are files NNN-T-Name.txt (order, type, name), UTF-8 with LF;
+the RDB keeps CP852 with CR LF. --source-in compiles what it stored and
+reports the first error by chapter, line and column. A task whose chapters
+are password-protected is refused both ways.
+
+
+Extending the runtime for a task
+--------------------------------
+
+A task-specific build adds units without changing this tree:
+
+1. A unit that assigns FANDDOS's hook in its initialization:
+
+       FandDosExtra: function(const Nm,Ext,Dir:ansistring; var Av:TArgs;
+                              nAv:integer; var ExitCode:integer):boolean;
+
+   It is called for every command line that is not a DOS builtin (Nm
+   upper-cased, without extension) and returns true when it handled it.
+   FandDosNotice shows a CP852 message once the screen is back, FandDosShell
+   runs a shell line, FandDosCmd re-dispatches a command. FANDCP and FANDPDF
+   depend only on the RTL. In an objfpc unit, TP's 16-bit integer is
+   smallint, and { } comments nest.
+
+2. FANDEXT.INC with the unit names for FAND.PAS's uses clause: `,mytask`
+
+3. fpc -Mtp -B -dFandExt -Fu<ext>/pas -Fi<ext>/pas -Fu<pcfand>/pas \
+       -FU<ext>/build/units -o<ext>/build/fand <pcfand>/pas/FAND.PAS
+
+The result is one binary; this runtime's MIT licence goes with it.
+
+
+Not ported
+----------
+
+FandGraph's BGI driver (GRAPH statements parse and report themselves
+unavailable), DML, disk sector I/O, BIOS printing, XEncode export
+compression, the SQL client (FandSQL, off in every build). The terminal
+cannot be read back, so screens are restored from a shadow copy.

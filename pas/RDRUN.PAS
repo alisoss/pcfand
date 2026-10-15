@@ -507,7 +507,8 @@ function EFldD.Ed(IsNewRec:boolean):boolean;
 
 procedure ResetLVBD;
 begin
-  FillChar(LVBD,sizeof(LVBD),0); LVBD.Size:=2*4;
+  FillChar(LVBD,sizeof(LVBD),0);
+  LVBD.Size:=2*sizeof(pointer);
 end;
 procedure SetMyBP(Bp:ProcStkPtr);
 begin
@@ -682,7 +683,10 @@ end;
 
 procedure SetCompileAll;
 begin with ChptTF^ do begin
-  CompileAll:=true; TimeStmp:=today+currtime; SetUpdHandle(Handle);
+  CompileAll:=true;
+  {$ifdef FPC}FloatToReal48(today+currtime,@TimeStmp);
+  {$else}TimeStmp:=today+currtime;{$endif}
+  SetUpdHandle(Handle);
 end end;
 
 end.

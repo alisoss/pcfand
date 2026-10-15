@@ -22,7 +22,10 @@ begin
   IsWrScreen:=false;
   if not MyGetEvent then begin ClrEvent;IsWrScreen:=false;exit end;
   if not Scroll then CleanFrameM;
-  NewExit(Ovr,er);goto Opet;         with Event do
+  {$ifdef FPC}Move(ExitBuf,er,sizeof(ExitRecord)); ExitBuf.OvrEx:=Ovr; ExitBuf.ExP:=ExitP; ExitBuf.BrkP:=BreakP;
+    ExitBuf.mBP:=MyBP; if SetJmp(ExitBuf.JmpBuf)<>0 then begin GoExitFired:=true; goto Opet end else GoExitFired:=false;
+    KeepInMemory([@I,@I1,@I2,@I3,@W1,@W2,@ww,@L1,@L2,@fs,@ss,@j,@LastL,@sp,@P1,@bb,@X]);{$else}NewExit(Ovr,er); goto
+    Opet;{$endif} with Event do
   if What=evKeyDown then begin EdOK:=false; ww:=KeyCode; ClrEvent;
   X:=ExitD;                         { Exit-procedure}
   while X<>nil do
@@ -34,7 +37,7 @@ begin
               if X^.Typ='Q' then
                 begin KbdChar:=ww;Konec:=true;EditT:=false;goto Nic end;
               case TypeT of
-                FileT: begin TestUpdFile;ReleaseStore(T);CloseH(TxtFH) end;
+                FileT: begin TestUpdFile;ReleaseStore(T);CloseTxtFh end;
                 LocalT,MemoT:
                   begin DelEndT;GetStore(2);move(T^,T^[3],LenT);
                     sp:=pointer(T);sp^.LL:=LenT;
@@ -51,7 +54,10 @@ begin
               RestoreExit(er);
               if TypeT=MemoT then StartExit(X,false)
               else CallProcedure(X^.Proc);
-              NewExit(Ovr,er);goto Opet;
+              {$ifdef FPC}Move(ExitBuf,er,sizeof(ExitRecord)); ExitBuf.OvrEx:=Ovr; ExitBuf.ExP:=ExitP;
+                ExitBuf.BrkP:=BreakP; ExitBuf.mBP:=MyBP; if SetJmp(ExitBuf.JmpBuf)<>0 then begin GoExitFired:=true; goto
+                Opet end else GoExitFired:=false; KeepInMemory([@I,@I1,@I2,@I3,@W1,@W2,@ww,@L1,@L2,@fs,@ss,@j,@LastL,
+                @sp,@P1,@bb,@X]);{$else}NewExit(Ovr,er); goto Opet;{$endif}
               if not Scroll then CrsShow;RestorePar(L2);
               case TypeT of
                 FileT:begin fs:=Part.PosP+IndT;
@@ -448,7 +454,7 @@ begin
     _F4_:begin W1:=ord(ToggleCS(Arr[Posi]));
                UpdatedL:= chr(W1)<>Arr[Posi];Arr[Posi]:=chr(W1) end;
 
-    $1000..$101F: begin WrChar(chr(lo(ww)));        { ***CTRL-klavesy*** }
+    {$ifdef FPC}$1001{$else}$1000{$endif}..$101F: begin WrChar(chr(lo(ww)));        { ***CTRL-klavesy*** }
                     if ww=$100D then begin TestKod;DekodLine;dec(Posi) end end;
     _CtrlF5_:
         Calculate;

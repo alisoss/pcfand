@@ -1,3 +1,4 @@
+{$ifdef FPC}{$mode tp}{$endif}
 {$A-,B-,F+,G-,I+,O+,R-,S+,V+,X+,L+}
 
 unit wwmix;
@@ -35,14 +36,16 @@ function HasPassword(FD:FileDPtr; Nr:word; Pw:string20):boolean;
 
 implementation
 
-uses obaseww,drivers,runfrml,compile,rdrun,runedi;
+uses obaseww,drivers,runfrml,compile,rdrun,runedi{$ifdef FPC},fanddos{$endif};
 
 
 procedure Ovr; far;
+{$ifdef FPC}begin end;{$else}
 assembler;
 asm   pop ax; pop ax; pop ax{bp}; push ax; push ax; call StackOvr;
       pop bp; pop ds; pop ax; pop dx; pop sp; push cs; push ax;
 end;
+{$endif}
 
 type ItemPtr=^Item;
      Item=record Chain:ItemPtr;
@@ -282,8 +285,15 @@ function SelFieldList (Nmsg:word;ImplAll:boolean;var FLRoot:FieldList):boolean;
 {---------------------------------------------------------------------------}
 
 function SelectDiskFile(Path:string; HdMsg:word; OnFace:boolean):PathStr;
+{$ifdef FPC}
+function DosMatch(const Nm,Mk:string):boolean;
+begin
+  DosMatch:=FandMaskMatch(Nm,Mk) or (copy(Mk,length(Mk)-1,2)='.*') and (pos('.',Nm)=0)
+    and FandMaskMatch(Nm,copy(Mk,1,length(Mk)-2));
+end;
+{$endif}
 var mask,s:string; SR:SearchRec; w:longint;
-    p:PathStr; d:DirStr; n:NameStr; ext,e:ExtStr; ne:string[12];
+    p:PathStr; d:DirStr; n:NameStr; ext,e:ExtStr; ne:{$ifdef FPC}string{$else}string[12]{$endif};
     c1,c2,r1,r2,c11,r11:word;
 label 1,2,3;
 begin
@@ -291,7 +301,7 @@ begin
   if OnFace then begin
     c1:=43; r1:=6; c2:=67; r2:=8; c11:=28; r11:=4 end;
   if Path='' then ext:='.*' else if Path[1]='.' then ext:=Path
-  else begin FSplit(FExpand(Path),d,n,e); ne:=n+e;
+  else begin FSplit(FExpand({$ifdef FPC}UnixPath(Path){$else}Path{$endif}),d,n,e); ne:=n+e;
     if ne='' then ne:='*.*'; goto 3 end;
   mask:='*'+ext;
 1:RdMsg(HdMsg);
@@ -300,7 +310,7 @@ begin
   EditTxt(mask,1,sizeof(mask)-1,22,'A',true,false,true,false,0);
   if KbdChar=_ESC_ then begin PopW(w); exit end;
   if pos(' ',mask)<>0 then begin WrLLF10Msg(60); goto 2 end;
-  FSplit(FExpand(mask),d,n,e);
+  FSplit(FExpand({$ifdef FPC}UnixPath(mask){$else}mask{$endif}),d,n,e);
   if e='' then e:=ext
   else if (ext='.RDB') and (e<>'.RDB') then begin
     WrLLF10Msg(005);goto 2 end;
@@ -308,6 +318,21 @@ begin
   if n='' then n:='*'; ne:=n+e;
   if (pos('*',ne)=0) and (pos('?',ne)=0) then begin
     SelectDiskFile:=d+ne; exit end;
+{$ifdef FPC}
+  { one pass over the directory: the mask is matched as DOS did, without case }
+3:p:=d+ne;
+  if FandDirExists(d) then FindFirst(d+'*',AnyFile,SR)
+  else DosError:=3;                       { FindFirst says 18, DOS said 3 }
+  if not(DosError in [0,18]) then begin
+    SetMsgPar(p); mask:=p; WrLLF10Msg(811); goto 1 end;
+  while DosError=0 do begin
+    if (SR.Attr and Directory)=0 then begin
+      if DosMatch(SR.name,ne) then PutSelect(SR.name) end
+    else if (SR.name='..') and (pos(DirectorySeparator,d)<>length(d)) or (SR.name[1]<>'.') then
+      PutSelect(DirectorySeparator+SR.name);
+    FindNext(SR) end;
+  FindClose(SR);
+{$else}
 3:p:=d+ne; FindFirst(p+#00,0,SR);
   if not(DosError in [0,18]) then begin
     SetMsgPar(p); mask:=p; WrLLF10Msg(811); goto 1 end;
@@ -319,13 +344,14 @@ begin
        ((pos('\',d)<>length(d)) or (SR.name<>'..')) and
        (SR.name<>'.') then PutSelect('\'+SR.name);
     FindNext(SR) end;
+{$endif}
   ss.Abcd:=true; SelectStr(c11,r11,HdMsg,p);
   if KbdChar=_ESC_ then exit;
   s:=GetSelect;
-  if s[1]='\' then begin
+  if s[1]={$ifdef FPC}DirectorySeparator{$else}'\'{$endif} then begin
     delete(s,1,1);
-    if s='..' then repeat dec(d[0]) until d[length(d)]='\'
-    else d:=d+s+'\';
+    if s='..' then repeat dec(d[0]) until d[length(d)]={$ifdef FPC}DirectorySeparator{$else}'\'{$endif}
+    else d:=d+s+{$ifdef FPC}DirectorySeparator{$else}'\'{$endif};
     goto 3 end;
   SelectDiskFile:=d+s;
 end;
@@ -333,7 +359,10 @@ end;
 function PromptFilter(Txt:string; var Bool:FrmlPtr; var BoolTxt:StringPtr):boolean;
   var p:pointer; er:ExitRecord; I:word; Msg:ScreenStr; Del:boolean; cf:FileDPtr;
   label 1,2,3;
-  begin MarkStore(p);I:=1;NewExit(Ovr,er);goto 3; PromptFilter:=true; Del:=true;
+  begin MarkStore(p);I:=1;{$ifdef FPC}Move(ExitBuf,er,sizeof(ExitRecord)); ExitBuf.OvrEx:=Ovr; ExitBuf.ExP:=ExitP;
+    ExitBuf.BrkP:=BreakP; ExitBuf.mBP:=MyBP; if SetJmp(ExitBuf.JmpBuf)<>0 then begin GoExitFired:=true; goto 3 end else
+    GoExitFired:=false; KeepInMemory([@p,@I,@Msg,@Del,@cf]);{$else}NewExit(Ovr,er); goto 3;{$endif} PromptFilter:=true;
+    Del:=true;
         ResetCompilePars; cf:=CFile;
       1:PromptLL(113,Txt,I,Del); Bool:=nil; BoolTxt:=nil;
         if KbdChar=_ESC_ then begin PromptFilter:=false;goto 2 end;

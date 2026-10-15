@@ -1,0 +1,3 @@
+{ sales per customer, made by the transformation Summary }
+Cust:A,6; Name:A,30; Invoices:F,4.0; Total:F,12.2;
+#K @ Cust;

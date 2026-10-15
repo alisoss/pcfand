@@ -1,0 +1,120 @@
+# Builds fand for Linux, macOS and Windows on every push; a v* tag also
+# publishes the archives (and SHA256SUMS) as that tag's GitHub release.
+name: build
+
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { platform: linux-x86_64,  os: ubuntu-24.04 }
+          - { platform: linux-aarch64, os: ubuntu-24.04-arm }
+    runs-on: ${{ matrix.os }}
+    # Debian 12's glibc keeps the binaries running on glibc 2.34+ (Ubuntu 22.04, RHEL 9)
+    container: debian:bookworm
+    steps:
+      - run: |
+          apt-get update -qq
+          DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
+            fp-compiler libc6-dev git ca-certificates
+      - uses: actions/checkout@v7
+      # root in the container, runner's uid on the checkout: git calls it dubious ownership
+      - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - run: tools/build.sh
+      - run: tools/package.sh ${{ matrix.platform }}
+      - uses: actions/upload-artifact@v7
+        with:
+          name: pcfand-${{ matrix.platform }}
+          path: build/dist/*.tar.gz
+          if-no-files-found: error
+
+  # arm64 only: FPC 3.2.2's x86_64-darwin assembly is rejected by current Xcode
+  macos:
+    runs-on: macos-15
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: 1
+    steps:
+      - run: brew install fpc
+      - uses: actions/checkout@v7
+      - run: tools/build.sh
+      - run: tools/package.sh macos-arm64
+      - uses: actions/upload-artifact@v7
+        with:
+          name: pcfand-macos-arm64
+          path: build/dist/*.tar.gz
+          if-no-files-found: error
+
+  windows:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      # the cross-compiler takes minutes to build; keep its layers in the Actions cache
+      - uses: docker/build-push-action@v7
+        env:
+          DOCKER_BUILD_RECORD_UPLOAD: false
+        with:
+          context: tools
+          file: tools/win-cross.Dockerfile
+          tags: fpcwin64
+          load: true
+          cache-from: type=gha,scope=fpcwin64
+          cache-to: type=gha,scope=fpcwin64,mode=max,ignore-error=true
+      - run: tools/win-build.sh
+      - run: tools/package.sh windows-x86_64
+      - uses: actions/upload-artifact@v7
+        with:
+          name: pcfand-windows-x86_64
+          path: build/dist/*.zip
+          if-no-files-found: error
+
+  # what tools/build.sh checks on Unix: the exe builds the sample task, here on real Windows
+  windows-test:
+    needs: windows
+    runs-on: windows-2025
+    steps:
+      - run: git config --global core.autocrlf false
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: pcfand-windows-x86_64
+          path: dl
+      - run: Expand-Archive -Path (Get-Item dl/*.zip).FullName -DestinationPath dl
+      - shell: bash
+        run: |
+          fand=$(echo "$PWD"/dl/pcfand-*/fand.exe)
+          cd examples/hello
+          "$fand" hello --source-in src </dev/null
+
+  release:
+    if: github.ref_type == 'tag'
+    needs: [linux, macos, windows-test]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: pcfand-*
+          path: dist
+          merge-multiple: true
+      - run: cd dist && sha256sum -- * > SHA256SUMS
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release view "$TAG" >/dev/null 2>&1 ||
+            gh release create "$TAG" --verify-tag --generate-notes --title "PC FAND $TAG"
+          gh release upload "$TAG" dist/* --clobber

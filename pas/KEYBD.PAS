@@ -1,7 +1,7 @@
 
                       { T P O I N T , T O B J E C T }
 
-
+{$ifndef FPC}
 procedure TPoint.Assign(XX,YY:word); assembler;
 asm les di,Self; mov ax,XX; mov es:[di].TPoint.X,ax;
     mov ax,YY; mov es:[di].TPoint.Y,ax end;
@@ -21,6 +21,7 @@ procedure Free(P: PObject);
 begin
   if P <> nil then Dispose(P, Done);
 end;
+{$endif}
 
 
                      { K E Y B O A R D }
@@ -71,45 +72,45 @@ const
   CsKbdSize=67;
   CaKbdSize=15;
   TabCsKbd: array[1..CsKbdSize*3] of char=  { Ascii to CS keyboard }
-      ('1',#2,'+','2',#3,'à','3',#4,'®','4',#5,'á','5',#6,'©',
-       '6',#7,'ë','7',#8,'ò','8',#9,'†','9',#$a,'°','0',#$b,'Ç',
+      ('1',#2,'+','2',#3,#$88,'3',#4,#$a8,'4',#5,#$87,'5',#6,#$a9,
+       '6',#7,#$91,'7',#8,#$98,'8',#9,#$a0,'9',#$a,#$a1,'0',#$b,#$82,
        ',',#$53,'.',{from german keyboard}
        '=',#$d,diCarka,'#',#$d,diCarka,'+',#$d,diHacek,'''',#$d,diHacek,
 
        '!',#2,'1','@',#3,'2','"',#3,'2','#',#4,'3','',#4,'3','$',#5,'4',
        '%',#6,'5','^',#7,'6','&',#7,'6','&',#8,'7','/',#8,'7','*',#9,'8',
        '(',#9,'8','(',#$a,'9',')',#$a,'9',')',#$b,'0','=',#$b,'0',
-       '-',#$c,'=','·',#$c,'=','_',#$c,'%','?',#$c,'%',
-       '[',#$1a,'£','Å',#$1a,'£','{',#$1a,'/','ö',#$1a,'/',
+       '-',#$c,'=',#$e1,#$c,'=','_',#$c,'%','?',#$c,'%',
+       '[',#$1a,#$a3,#$81,#$1a,#$a3,'{',#$1a,'/',#$9a,#$1a,'/',
        ']',#$1b,')','+',#$1b,')','}',#$1b,'(','*',#$1b,'(',
-       ';',#$27,'ñ','î',#$27,'ñ',':',#$27,'"','ô',#$27,'"',
-       '''',#$28,'≠','Ñ',#$28,'≠','"',#$28,'!','é',#$28,'!',
+       ';',#$27,#$96,#$94,#$27,#$96,':',#$27,'"',#$99,#$27,'"',
+       '''',#$28,#$ad,#$84,#$28,#$ad,'"',#$28,'!',#$8e,#$28,'!',
        '~',#$29,';','^',#$29,';', '\',#$2b,diUmlaut,'|',#$2b,'''',
        '<',#$33,'?',';',#$33,'?', '>',#$34,':','/',#$35,'-','?',#$35,'_',
        'Y',#$15,'Z','y',#$15,'z','Z',#$2c,'Y','z',#$2c,'y',
        #25{_Y_},#$15,#26{_Z_},#26{_Z_},#$2c,#25{_Y_});
   SlKbdSize=63;
   TabSlKbd: array[1..SlKbdSize*3] of char=  { Ascii to Slov. keyboard }
-      ('1',#2,'+','2',#3,'å','3',#4,'®','4',#5,'á','5',#6,'ü',
-       '6',#7,'ë','7',#8,'ò','8',#9,'†','9',#$a,'°','0',#$b,'Ç',
+      ('1',#2,'+','2',#3,#$8c,'3',#4,#$a8,'4',#5,#$87,'5',#6,#$9f,
+       '6',#7,#$91,'7',#8,#$98,'8',#9,#$a0,'9',#$a,#$a1,'0',#$b,#$82,
        ',',#$53,'.',{from german keyboard}
        '=',#$d,diCarka,'#',#$d,diCarka,'+',#$d,diHacek,'''',#$d,diHacek,
 
        '!',#2,'1','@',#3,'2','"',#3,'2','#',#4,'3','',#4,'3','$',#5,'4',
        '%',#6,'5','^',#7,'6','&',#7,'6','&',#8,'7','/',#8,'7','*',#9,'8',
        '(',#9,'8','(',#$a,'9',')',#$a,'9',')',#$b,'0','=',#$b,'0',
-       '-',#$c,'=','·',#$c,'=','_',#$c,'%','?',#$c,'%',
-       '[',#$1a,'£','Å',#$1a,'£','{',#$1a,'/','ö',#$1a,'/',
-       ']',#$1b,'Ñ','+',#$1b,'Ñ','}',#$1b,'(','*',#$1b,'(',
-       ';',#$27,'ì','î',#$27,'ì',':',#$27,'"','ô',#$27,'"',
-       '''',#$28,')','Ñ',#$28,')','"',#$28,'!','é',#$28,'!',
+       '-',#$c,'=',#$e1,#$c,'=','_',#$c,'%','?',#$c,'%',
+       '[',#$1a,#$a3,#$81,#$1a,#$a3,'{',#$1a,'/',#$9a,#$1a,'/',
+       ']',#$1b,#$84,'+',#$1b,#$84,'}',#$1b,'(','*',#$1b,'(',
+       ';',#$27,#$93,#$94,#$27,#$93,':',#$27,'"',#$99,#$27,'"',
+       '''',#$28,')',#$84,#$28,')','"',#$28,'!',#$8e,#$28,'!',
        '~',#$29,';','^',#$29,';','<',#$33,'?',';',#$33,'?',
        '>',#$34,':','/',#$35,'-','?',#$35,'_',
        'Y',#$15,'Z','y',#$15,'z','Z',#$2c,'Y','z',#$2c,'y');
   DtKbdSize=13;
   TabDtKbd: array[1..DtKbdSize*3] of char=  { Ascii to D keyboard }
-      ('@',#3,'"','-',#$c,'·','_',#$c,'/','[',#$1a,'Å','{',#$1a,'ö',
-       ';',#$27,'î',':',#$27,'ô','''',#$28,'Ñ','"',#$28,'é',
+      ('@',#3,'"','-',#$c,#$e1,'_',#$c,'/','[',#$1a,#$81,'{',#$1a,#$9a,
+       ';',#$27,#$94,':',#$27,#$99,'''',#$28,#$84,'"',#$28,#$8e,
        '<',#$33,';','>',#$34,':','/',#$35,'-','~',#$29,'''');
   HacekSzSl=29;
   TabHacek: array[1..2*HacekSzSl] of char=      { ^ }
@@ -117,7 +118,7 @@ const
        'e',#$88,'E',#$89,'z',#$91,'Z',#$92,'o',#$93,'O',#$a7,
        'u',#$96,'U',#$a6,'r',#$a9,'R',#$9e,'l',#$8c,'L',#$9c,
        's',#$a8,'S',#$9b,'n',#$a4,'N',#$a5,diHacek,'+',
-       'a','Ñ','A','é','p','î','P','ô','h','Å','H','ö');
+       'a',#$84,'A',#$8e,'p',#$94,'P',#$99,'h',#$81,'H',#$9a);
   CarkaSzSl=21;
   TabCarka: array[1..2*CarkaSzSl] of char=              { ' }
       ('e',#$82,'E',#$90,'l',#$8d,'L',#$8a,'i',#$a1,'I',#$8b,
@@ -126,7 +127,7 @@ const
        'p',#$b5,'P',#$b6,'h',#$b7,'H',#$b8);
   UmlautSz=7;
   TabUmlaut: array[1..2*UmlautSz] of char=            { : }
-      ('a','Ñ','A','é','o','î','O','ô','u','Å','U','ö',diUmlaut,'\');
+      ('a',#$84,'A',#$8e,'o',#$94,'O',#$99,'u',#$81,'U',#$9a,diUmlaut,'\');
   ToggleKamen:array[$41..$ab] of byte= (143,66,128,133,144,
     70,71,72,139,74,75,138,77,165,149,
     80,81,158,155,134,151,86,87,88,157,
@@ -139,6 +140,132 @@ const
     129,166,121,79,85,83,76,89,171,116,
     132,105,147,150,110,78,154,153,115,170,
     114,82);
+{$ifdef FPC}
+procedure BreakCheck;
+begin end;
+function CurrToKamen(C:char):char;
+var b:byte;
+begin
+  b := ord(C);
+  if (Fonts.VFont=foLatin2) and (b >= $80) then
+    CurrToKamen := char(TabLtK[b])
+  else
+    CurrToKamen := C;
+end;
+procedure ConvKamenToCurr(var Buf;L:word);
+type TArr = array[0..65534] of byte;
+var p:^TArr; i:word; b:byte;
+begin
+  p := @Buf; if L=0 then exit;
+  for i := 0 to L-1 do begin
+    b := p^[i];
+    if b >= $80 then begin
+      if Fonts.NoDiakrSupported then
+        p^[i] := TabKtN[b]
+      else if Fonts.VFont=foLatin2 then
+        p^[i] := TabKtL[b];
+    end;
+  end;
+end;
+procedure ConvKamenLatin(var Buf;L:word;ToLatin:boolean);
+type TArr = array[0..65534] of byte;
+var p:^TArr; i:word; b:byte;
+begin
+  p := @Buf; if L=0 then exit;
+  for i := 0 to L-1 do begin
+    b := p^[i];
+    if b >= $80 then begin
+      if ToLatin then p^[i] := TabKtL[b]
+      else p^[i] := TabLtK[b];
+    end;
+  end;
+end;
+function ToggleCS(C:char):char;
+var b:byte;
+begin
+  b := ord(C);
+  if b < $41 then begin ToggleCS:=C; exit end;
+  if (Fonts.VFont=foLatin2) and (b >= $80) then
+    b := TabLtK[b];
+  if b <= $AB then
+    b := ToggleKamen[b];
+  if (Fonts.VFont=foLatin2) and (b >= $80) then
+    b := TabKtL[b];
+  ToggleCS := char(b);
+end;
+function NoDiakr(C:char):char;
+var b:byte;
+begin
+  b := ord(C);
+  if b < $80 then begin NoDiakr:=C; exit end;
+  if Fonts.VFont=foLatin2 then
+    NoDiakr := char(TabLtN[b])
+  else if b <= $AB then
+    NoDiakr := char(TabKtN[b])
+  else
+    NoDiakr := C;
+end;
+procedure ConvToNoDiakr(var Buf;L:word;FromFont:TVideoFont);
+type TArr = array[0..65534] of byte;
+var p:^TArr; i:word; b:byte;
+begin
+  if (FromFont=foAscii) or (L=0) then exit;
+  p := @Buf; if L=0 then exit;
+  for i := 0 to L-1 do begin
+    b := p^[i];
+    if b >= $80 then begin
+      if FromFont=foLatin2 then p^[i] := TabLtN[b]
+      else p^[i] := TabKtN[b];
+    end;
+  end;
+end;
+procedure ClearKeyBuf; begin Diak := #0; while PollStdin do ReadStdinByte end;
+procedure ClearKbdBuf; begin ClearKeyBuf; KbdBuffer[0] := #0 end;
+procedure AddToKbdBuf(KeyCode:word);
+var L:byte; K:word;
+begin
+  K := KeyCode;
+  if K=0 then K:=$0300
+  else if K=$0300 then K:=$8400;
+  L := ord(KbdBuffer[0]);
+  if L > 253 then exit;
+  inc(L);
+  KbdBuffer[L] := char(lo(K));
+  if lo(K)=0 then begin
+    inc(L);
+    KbdBuffer[L] := char(hi(K));
+  end;
+  KbdBuffer[0] := char(L);
+end;
+function KeyPressed:boolean; begin BreakCheck; EnsureRawTty; KeyPressed := PollStdin end;
+function ReadKey:word;
+begin
+  if FandBatch then begin ReadKey:=_ESC_; exit end;
+  EnsureRawTty;
+  repeat BreakCheck until PollStdinMs(50) or HangupRequested;
+  { the terminal is gone: Esc, and the next WaitEvent closes the task }
+  if HangupRequested then begin ReadKey:=_ESC_; exit end;
+  ReadKey := ReadTermKey;
+end;
+function KbdTimer(Delta:word;Kind:byte):boolean;
+var EndTime:longint; b:byte;
+label 1;
+begin
+  EnsureRawTty;
+  Timer := longint(SysUtils.GetTickCount64 div 55);
+  EndTime := Timer+Delta; KbdTimer:=false;
+1:Timer := longint(SysUtils.GetTickCount64 div 55);
+  case Kind of
+    1: if PollStdin then begin
+         b := ReadStdinByte;
+         if b = $1B then exit;
+       end;
+    2: if PollStdin then begin ReadStdinByte; exit end;
+  end;
+  if Timer<EndTime then goto 1;
+  KbdTimer:=true;
+end;
+{$else}
 
 procedure BreakIntHandler; assembler;
 asm  push bx; push ax; push ds; mov ax,SEG @Data; mov ds,ax; cmp spec.NoCheckBreak,0; jne @1;
@@ -464,10 +591,10 @@ begin
       if RedKeyName='>' then begin Event.KeyCode:=ord('>'); goto 2 end;
       if RedKeyName='' then begin Event.KeyCode:=_up_; goto 2 end;
       if RedKeyName='' then begin Event.KeyCode:=_down_; goto 2 end;
-      if (RedKeyName='Ÿ') or
+      if (RedKeyName=#$11#$d9) or
          (RedKeyName='Enter') then begin Event.KeyCode:=_M_; goto 2 end;
-      if RedKeyName='ƒ≥' then begin Event.KeyCode:=_Tab_; goto 2 end;
-      if RedKeyName='≥ƒ' then begin Event.KeyCode:=_ShiftTab_; goto 2 end;
+      if RedKeyName=#$c4#$10#$b3 then begin Event.KeyCode:=_Tab_; goto 2 end;
+      if RedKeyName=#$b3#$11#$c4 then begin Event.KeyCode:=_ShiftTab_; goto 2 end;
       if RedKeyName='Esc' then begin Event.KeyCode:=_ESC_; goto 2 end;
       if RedKeyName='PgUp' then begin Event.KeyCode:=_PgUp_; goto 2 end;
       if RedKeyName='PgDn' then begin Event.KeyCode:=_PgDn_; goto 2 end;
@@ -635,3 +762,4 @@ asm  mov bx,N; mov ax,34ddH; mov dx,0012H; cmp dx,bx; jnc @2;
 
 procedure NoSound; assembler;
 asm  in al,61H; and al,0fcH; out 61H,al end;
+{$endif}

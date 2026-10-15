@@ -1,0 +1,9 @@
+{ functions, usable in every chapter }
+function WithVat(x:real):real;
+begin
+  WithVat:=x*(1+PARAM.VatRate/100);
+end;
+function DaysLate(due:real):real;
+begin
+  DaysLate:=cond(due<today: today-due, else: 0);
+end;

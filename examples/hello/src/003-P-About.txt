@@ -1,0 +1,15 @@
+{ the About box }
+var k:string;
+begin
+  with window(0,0,54,9,='About'!) do begin
+    writeln('');
+    writeln('   Hello World');
+    writeln('   a sample application for PC FAND 4.2x');
+    writeln('');
+    writeln('   PC FAND is open source under the MIT licence.');
+    writeln('   Copyright (c) 1990-2018 ALIS spol. s r.o.');
+    writeln('');
+    write('   Press any key.');
+    k:=readkey
+  end
+end;

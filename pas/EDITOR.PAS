@@ -49,13 +49,15 @@ uses drivers,obase,obaseww,runfrml,oaccess,wwmix,           {EDEVENT - SelectDis
      compile,                    { - Error,RunError,... }
      runproc,                    {EDEVENT - CallProcedure ... ExitD}
      runedi,                     {EDEVENT - StartExit, E^ ...ExitD}
-     printtxt;                   {EDEVENT - PrintArray ... ^k^p}
+     printtxt{$ifdef FPC},fanddos,fandcp{$endif};  {EDEVENT - PrintArray ... ^k^p}
 
 procedure Ovr; far;
+{$ifdef FPC}begin end;{$else}
 assembler;
 asm   pop ax; pop ax; pop ax{bp}; push ax; push ax; call StackOvr;
       pop bp; pop ds; pop ax; pop dx; pop sp; push cs; push ax;
 end;
+{$endif}
 
 const InterfL=4;{sizeof(Insert+Indent+Wrap+Just)}
 
@@ -130,17 +132,22 @@ var  Part:PartDescr;
 var T:CharArrPtr;
     {************ end for SavePar}
 
+{$ifdef FPC}
+function InterfLen:word; begin InterfLen:=ofs(Just)-ofs(Insert)+sizeof(Just) end;
+{$else}
+function InterfLen:word; begin InterfLen:=InterfL end;
+{$endif}
 function SavePar:longint;
-  var sp:LongStrPtr;len:word;
-  begin len:=InterfL+ofs(T)-ofs(Mode)+4;
+  var sp:LongStrPtr;len,il:word;
+  begin il:=InterfLen; len:=il+ofs(T)-ofs(Mode)+sizeof(T);
     sp:=GetStore(len+2);sp^.LL:=len;
-    move(Insert,sp^.A,InterfL);move(Mode,sp^.A[InterfL+1],len-InterfL);
+    move(Insert,sp^.A,il);move(Mode,sp^.A[il+1],len-il);
     SavePar:=StoreInTWork(sp);ReleaseStore(sp);
   end;
 procedure RestorePar(l:longint);
-  var sp:LongStrPtr;
-  begin sp:=ReadDelInTWork(l);
-    move(sp^.A,Insert,InterfL);move(sp^.A[InterfL+1],Mode,sp^.LL-InterfL);
+  var sp:LongStrPtr;il:word;
+  begin sp:=ReadDelInTWork(l); il:=InterfLen;
+    move(sp^.A,Insert,il);move(sp^.A[il+1],Mode,sp^.LL-il);
     ReleaseStore(sp);
   end;
 
@@ -235,7 +242,10 @@ begin
     w2:=PushW1(1,TxtRows,TxtCols,TxtRows,(WFlags and WPushPixel)<>0,false);
     w3:=PushWFramed(v^.C1,v^.R1,v^.C2,v^.R2,Atr,Hd,'',WFlags) end
   else begin w1:=PushW(1,1,TxtCols,TxtRows); TextAttr:=Atr end;
-  NewExit(Ovr,er);goto 4;
+  {$ifdef FPC}Move(ExitBuf,er,sizeof(ExitRecord)); ExitBuf.OvrEx:=Ovr; ExitBuf.ExP:=ExitP; ExitBuf.BrkP:=BreakP;
+    ExitBuf.mBP:=MyBP; if SetJmp(ExitBuf.JmpBuf)<>0 then begin GoExitFired:=true; goto 4 end else GoExitFired:=false;
+    KeepInMemory([@Srch,@Upd,@Size,@L,@w1,@w2,@w3,@p,@Loc,@Ind,@oldInd,@oldTxtxy]);{$else}NewExit(Ovr,er); goto
+    4;{$endif}
   Loc:=LS<>nil;
   if not Loc then
     begin MaxLenT:=$FFF0;Part.UpdP:=false;
@@ -300,7 +310,10 @@ begin
     w2:=PushW1(1,TxtRows,TxtCols,TxtRows,(WFlags and WPushPixel)<>0,false);
     w3:=PushWFramed(v^.C1,v^.R1,v^.C2,v^.R2,Atr,Hd,'',WFlags) end
   else begin w1:=PushW(1,1,TxtCols,TxtRows); TextAttr:=Atr end;
-  NewExit(Ovr,er);goto 4;
+  {$ifdef FPC}Move(ExitBuf,er,sizeof(ExitRecord)); ExitBuf.OvrEx:=Ovr; ExitBuf.ExP:=ExitP; ExitBuf.BrkP:=BreakP;
+    ExitBuf.mBP:=MyBP; if SetJmp(ExitBuf.JmpBuf)<>0 then begin GoExitFired:=true; goto 4 end else GoExitFired:=false;
+    KeepInMemory([@Srch,@Upd,@Size,@L,@w1,@w2,@w3,@Loc,@Ind,@oldInd,@oldTxtxy,@LS,@compErrTxt]);{$else}NewExit(Ovr,er);
+    goto 4;{$endif}
   Loc:=LP<>nil;LocalPPtr:=LP;
   if not Loc then
     begin MaxLenT:=$FFF0;LenT:=0;Part.UpdP:=false;
@@ -328,15 +341,18 @@ begin
   if EdBreak=$FFFF then case KbdChar of
     _F9_    : begin if Loc then
                       begin TWork.Delete(LP^);LP^:=StoreInTWork(LS) end
-                    else RdPart;
+                    else begin {$ifdef FPC}SaveTxtBack;{$endif} RdPart end;
                 goto 1 end;
     _AltF10_: begin Help(nil,'',false); goto 2 end;
     _F1_    : begin RdMsg(6); Help(RdbDPtr(HelpFD),MsgLine,false);
 2:            if not Loc then RdPart; goto 1 end end;
-  if not Loc then  begin Size:=FileSizeH(TxtFh); CloseH(TxtFh) end;
+  {$ifdef FPC}TxtKeep:=(EdBreak=$FFFF)and(KbdChar=_F6_);{$endif}
+  if not Loc then  begin Size:=FileSizeH(TxtFh); CloseTxtFh end;
   if (EdBreak=$FFFF)and(KbdChar=_F6_) then
     if Loc then begin PrintArray(@T^,LenT,false); goto 1 end
-    else begin CPath:=TxtPath; CVol:=TxtVol; PrintTxtFile(0);
+    else begin CPath:=TxtPath; CVol:=TxtVol;
+       {$ifdef FPC}if TxtWork then CPath:=WorkTxtPath;{$endif}  { what is on the screen }
+       PrintTxtFile(0);
        OpenTxtFh(Mode); RdPart; goto 1 end;
   if not Loc and(Size<1) then DeleteFile(TxtPath);
   if Loc and(KbdChar=_Esc_) then LS^.LL:=LenT;
@@ -371,7 +387,7 @@ procedure ClearHelpStkForCRdb;
 var i:word;
 begin
   i:=1; while i<=iStk do
-  if Stk[i].Rdb=CRdb then begin move(Stk[i+1],Stk[i],(iStk-i)*12); dec(iStk) end
+  if Stk[i].Rdb=CRdb then begin move(Stk[i+1],Stk[i],(iStk-i)*sizeof(Stk[1])); dec(iStk) end  { BP7: 12 }
   else inc(i);
 end;
 
@@ -407,7 +423,10 @@ begin
     fd:=HelpFD; if HelpFD^.Handle=$FF then begin WrLLF10Msg(57);exit end end
   else begin fd:=R^.HelpFD; if fd=nil then exit end;
   MarkStore(p); cf:=CFile; w:=0; w2:=0;
-  NewExit(Ovr,er); goto 4;
+  {$ifdef FPC}Move(ExitBuf,er,sizeof(ExitRecord)); ExitBuf.OvrEx:=Ovr; ExitBuf.ExP:=ExitP; ExitBuf.BrkP:=BreakP;
+    ExitBuf.mBP:=MyBP; if SetJmp(ExitBuf.JmpBuf)<>0 then begin GoExitFired:=true; goto 4 end else GoExitFired:=false;
+    KeepInMemory([@p,@fd,@c1,@c2,@r1,@r2,@w,@w2,@i,@l,@l2,@iRec,@oldIRec,@s,@s2,@os,@os2,@delta,@frst,@byName,@backw,
+    @cf,@cf2]);{$else}NewExit(Ovr,er); goto 4;{$endif}
   if InCWw then begin
     c1:=WindMin.X+1; c2:=WindMax.X+1; r1:=WindMin.Y+1; r2:=WindMax.Y+1;
     if (c1=1) and (c2=TxtCols) and (r1=2) and (r2=TxtRows) then r1:=1;
@@ -423,11 +442,12 @@ begin
   else begin
     frst:=false; byName:=false; s2:=s;
     if (s^.LL>0) and (s^.A[1]='{') then begin   { view after 1. line }
-      l:=FindCtrlM(s,1,1); l:=SkipCtrlMJ(s,l)-1; inc(os2,l); s2^.LL:=s^.LL-l end;
+      l:=FindCtrlM(s,1,1); l:=SkipCtrlMJ(s,l)-1; {$ifdef FPC}s2:=LongStrPtr(PtrUInt(s2)+l){$else}inc(os2,l){$endif};
+        s2^.LL:=s^.LL-l end;
     if s2^.LL=0 then if delta=0 then goto 4 else if iRec<>oldIRec then begin
       oldIRec:=iRec; inc(iRec,delta); goto 2 end;
     ViewHelpText(s2,i);
-    if iStk<maxStk then inc(iStk) else move(Stk[2],Stk,sizeof(Stk)-4);
+    if iStk<maxStk then inc(iStk) else move(Stk[2],Stk,sizeof(Stk)-sizeof(Stk[1]));
     with Stk[iStk] do begin Rdb:=R; FD:=cf2; iR:=iRec; iT:=i end;
     oldIRec:=iRec; i:=1; delta:=0; ReleaseStore(s); CFile:=cf2;
     case KbdChar of

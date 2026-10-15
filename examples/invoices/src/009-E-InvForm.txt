@@ -1,0 +1,7 @@
+{ the invoice form: the header of one invoice }
+#_INVOICE No,Issued,Due,Cust,CustName,Total,Paid,Note;
+ ┌──────────────────────────────── INVOICE ─────────────────────────────────┐
+ │  number _______         issued __________         due __________         │
+ │  customer ______ ______________________________                          │
+ │  total ______________   paid _   note _                                  │
+ └──────────────────────────────────────────────────────────────────────────┘

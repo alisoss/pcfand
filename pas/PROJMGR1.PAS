@@ -13,9 +13,16 @@ function ExtToTyp(Ext:ExtStr):char;
 procedure ReleaseFDLDAfterChpt;
 var FD:FileDPtr; R:RdbDPtr;
 begin
+  {$ifdef FPC}
+  if (Chpt=nil) or (PtrUInt(Chpt) < 65536) then begin CompileFD:=true; exit end;
+  if (CRdb=nil) or (PtrUInt(CRdb) < 65536) then begin CompileFD:=true; exit end;
+  if (E<>nil) and (PtrUInt(E) < 65536) then begin CompileFD:=true; exit end;
+  {$endif}
   if Chpt^.Chain<>nil then CloseFAfter(Chpt^.Chain);
   Chpt^.Chain:=nil; LinkDRoot:=CRdb^.OldLDRoot; FuncDRoot:=CRdb^.OldFCRoot;
-  CFile:=Chpt;CRecPtr:=E^.NewRecPtr; R:=CRdb^.ChainBack;
+  CFile:=Chpt;
+  {$ifdef FPC}if E=nil then CRecPtr:=Chpt^.RecPtr else{$endif} CRecPtr:=E^.NewRecPtr;
+  R:=CRdb^.ChainBack;
   if R<>nil then CRdb^.HelpFD:=R^.HelpFD else CRdb^.HelpFD:=nil;
   CompileFD:=true;
 end;
@@ -165,7 +172,58 @@ function ChptWriteCRec:word;
 var CFileF:FileDPtr;
 var sz:longint; nTb:word; Tb:pointer;
 
+{$ifdef FPC}
+{ BP7 kept an image of the compiled FileD behind ChptOldTxt, built of
+  16-bit pointers. The port keeps the declaration's text there, marked by
+  OldDclMark, and compiles it again when the old declaration is needed:
+  MergeOldNew converts the data file to a changed declaration with it. }
+const OldDclMark='{old declaration}'^M^J;
+procedure SetOldDcl(Txt:LongStrPtr);   { into ChptOldTxt of the current record }
+var t:LongStrPtr; p:pointer; n:word;
+begin
+  n:=length(OldDclMark); if longint(Txt^.LL)+n>$FFF0 then exit;
+  MarkStore(p); t:=GetStore(Txt^.LL+n+2); t^.LL:=Txt^.LL+n;
+  Move(OldDclMark[1],t^.A,n); Move(Txt^.A,t^.A[n+1],Txt^.LL);
+  StoreChptTxt(ChptOldTxt,t,false); ReleaseStore(p);
+end;
+function IsOldDcl(Pos:longint):boolean;   { a text WrFDSegment stored }
+var s:LongStrPtr; p:pointer;
+begin
+  IsOldDcl:=false; if (Pos<=0) or CRdb^.Encrypted then exit;
+  MarkStore(p); s:=ChptTF^.Read(1,Pos);
+  IsOldDcl:=(s^.LL>=length(OldDclMark)) and
+            (CompareByte(s^.A,OldDclMark[1],length(OldDclMark))=0);
+  ReleaseStore(p);
+end;
 procedure WrFDSegment(RecNr:longint);
+var cf:FileDPtr; p:pointer; s,o:LongStrPtr; n:word;
+begin
+  if CRdb^.Encrypted or not IsTestRun or (Chpt^.UMode=RdOnly) then exit;
+  cf:=CFile; CFile:=Chpt; MarkStore(p);
+  s:=_LongS(ChptTxt); n:=length(OldDclMark);
+  if IsOldDcl(_t(ChptOldTxt)) then begin          { the same text is there already }
+    o:=ChptTF^.Read(1,_t(ChptOldTxt));
+    if (o^.LL=s^.LL+n) and ((s^.LL=0) or (CompareByte(o^.A[n+1],s^.A,s^.LL)=0)) then begin
+      ReleaseStore(p); CFile:=cf; exit end end;
+  SetOldDcl(s); WriteRec(RecNr);
+  ReleaseStore(p); CFile:=cf;
+end;
+function RdFDSegment(FromI: word; Pos: longint): boolean;
+var fd:FileDPtr;
+begin
+  RdFDSegment:=false;
+  if (FromI<>0) or not IsOldDcl(Pos) then exit;   { FromI<>0: the caller compiles the text }
+  fd:=RdFileDOld(Pos,TrailChar(' ',_ShortS(ChptName)));
+  if fd<>nil then begin CFile:=fd; RdFDSegment:=true end;
+end;
+{$else}
+procedure WrFDSegment(RecNr:longint);
+{$ifdef FPC}
+function O(p:pointer):pointer;
+begin O:=p;  end;
+function OCF(p:pointer):pointer;
+begin OCF:=p;  end;
+{$else}
 function O(p:pointer):pointer; assembler;
 asm xor dx,dx; mov ax,p[2].word; or ax,ax; jz @1;
     mov dx,CFile[2].word; sub ax,dx; mov cl,4; shl ax,cl; add ax,p.word;
@@ -174,12 +232,14 @@ function OCF(p:pointer):pointer; assembler;
 asm xor dx,dx; mov ax,p[2].word; or ax,ax; jz @1;
     mov dx,CFileF[2].word; sub ax,dx; mov cl,4; shl ax,cl; add ax,p.word;
 @1: end;
+{$endif}
 function OTb(Nm:string):pointer;
 var s:StringPtr; sofs:word absolute s; i:word;
 label 1;
 begin
   s:=Tb; for i:=1 to nTb do begin
-    if SEquUpcase(s^,Nm) then goto 1; inc(sofs,length(s^)+1) end;
+    if SEquUpcase(s^,Nm) then goto 1; {$ifdef FPC}s:=StringPtr(PtrUInt(s)+length(s^)+1){$else}inc(sofs,
+      length(s^)+1){$endif} end;
   inc(nTb); inc(sz,length(Nm)+1); if sz>MaxLStrLen then RunError(664);
   s:=StoreStr(Nm);
 1:OTb:=O(s);
@@ -347,6 +407,7 @@ begin     { CFile= Rdb; CRecPtr= 'F' chapter record }
     p:=Normalize(AbsAdr(CFile)+CFile^.LiOfs); CFile^.LiOfs:=0 end;
   ReleaseStore(p); LexWord:=lw;
 end;
+{$endif}
 
 function FindHelpRecNr(FD:FileDPtr; txt:string):word;
 var cf:FileDPtr; cr:pointer; md:LockMode; NmF,TxtF:FieldDPtr; i:word;
@@ -405,7 +466,7 @@ var s2:LongStrPtr; p:pointer; LicNr:word; oldpos,pos:longint;
 begin
   licNr:=ChptTF^.LicenseNr; oldpos:=_t(F); MarkStore(p);
   if CRdb^.Encrypted then if LicNr<>0 then begin
-      s2:=GetStore($8100{possibly longer}); XEncode(s,s2); s:=s2 end
+      s2:=GetStore({$ifdef FPC}S^.LL+S^.LL div 8+16{$else}$8100{possibly longer}{$endif}); XEncode(s,s2); s:=s2 end
   else CodingLongStr(S);
   if Del then if licNr=0 then ChptTF^.Delete(OldPos)
     else if OldPos<>0 then ChptTF^.Delete(OldPos-licNr);

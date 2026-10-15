@@ -46,18 +46,25 @@ procedure RollPred;
   end;
 
 procedure Frame;
+  {$ifdef FPC}
+  { BP7 read the four constants below as one string of 63 (FrameString[0]
+    set to 63), length bytes included; FPC need not place them in a row -
+    win64 does not. One string, the same 63 bytes. }
+  const FrameString:string[63]=
+        #80#72#179#77#218#192#195#75#191#217#180#196#194#193#197+#15+
+        #80#72#186#77#214#211#199#75#183#189#182#196#210#208#215+#15+
+        #80#72#179#77#213#212#198#75#184#190#181#205#209#207#216+#15+
+        #80#72#186#77#201#200#204#75#187#188#185#205#203#202#206;
+  {$else}
   const FrameString:string[15]=
         #80#72#179#77#218#192#195#75#191#217#180#196#194#193#197;
-        {       ³      Ú   À   Ã      ¿   Ù   ´   Ä   Â   Á   Å }
         FS1:string[15]=
         #80#72#186#77#214#211#199#75#183#189#182#196#210#208#215;
-        {       º      Ö   Ó   Ç      ·   ½   ¶   Ä   Ò   Ð   × }
         FS2:string[15]=
         #80#72#179#77#213#212#198#75#184#190#181#205#209#207#216;
-        {       ³      Õ   Ô   Æ      ¸   ¾   µ   Í   Ñ   Ï   Ø }
         FS3:string[15]=
         #80#72#186#77#201#200#204#75#187#188#185#205#203#202#206;
-        {       º      É   È   Ì      »   ¼   ¹   Í   Ë   Ê   Î }
+  {$endif}
   var oldzn:char;dir,odir,zn1,zn2,b:byte;
   procedure direction(x:byte);var y:byte;
     begin y:=$10;if x>2 then y:=y shl 1;if x=0 then y:=0;
@@ -112,18 +119,25 @@ procedure CleanFrameM;
   end;
 
 procedure FrameStep(var odir:byte;EvKeyC:word);
+  {$ifdef FPC}
+  { BP7 read the four constants below as one string of 63 (FrameString[0]
+    set to 63), length bytes included; FPC need not place them in a row -
+    win64 does not. One string, the same 63 bytes. }
+  const FrameString:string[63]=
+        #80#72#179#77#218#192#195#75#191#217#180#196#194#193#197+#15+
+        #80#72#186#77#214#211#199#75#183#189#182#196#210#208#215+#15+
+        #80#72#179#77#213#212#198#75#184#190#181#205#209#207#216+#15+
+        #80#72#186#77#201#200#204#75#187#188#185#205#203#202#206;
+  {$else}
   const FrameString:string[15]=
         #80#72#179#77#218#192#195#75#191#217#180#196#194#193#197;
-        {       ³      Ú   À   Ã      ¿   Ù   ´   Ä   Â   Á   Å }
         FS1:string[15]=
         #80#72#186#77#214#211#199#75#183#189#182#196#210#208#215;
-        {       º      Ö   Ó   Ç      ·   ½   ¶   Ä   Ò   Ð   × }
         FS2:string[15]=
         #80#72#179#77#213#212#198#75#184#190#181#205#209#207#216;
-        {       ³      Õ   Ô   Æ      ¸   ¾   µ   Í   Ñ   Ï   Ø }
         FS3:string[15]=
         #80#72#186#77#201#200#204#75#187#188#185#205#203#202#206;
-        {       º      É   È   Ì      »   ¼   ¹   Í   Ë   Ê   Î }
+  {$endif}
   var oldzn:char;dir,zn1,zn2,b:byte;
   procedure direction(x:byte);var y:byte;
     begin y:=$10;if x>2 then y:=y shl 1;if x=0 then y:=0;
@@ -336,7 +350,10 @@ procedure Calculate;
       p:pointer; FTyp:char; R:float; Del:boolean;
   label 0,1,2,3,4;
   begin
-    MarkStore(p); NewExit(Ovr,er);goto 2; ResetCompilePars;
+    MarkStore(p); {$ifdef FPC}Move(ExitBuf,er,sizeof(ExitRecord)); ExitBuf.OvrEx:=Ovr; ExitBuf.ExP:=ExitP;
+      ExitBuf.BrkP:=BreakP; ExitBuf.mBP:=MyBP; if SetJmp(ExitBuf.JmpBuf)<>0 then begin GoExitFired:=true; goto 2 end
+      else GoExitFired:=false; KeepInMemory([@Z,@Txt,@I,@Msg,@p,@FTyp,@R,@Del]);{$else}NewExit(Ovr,er); goto 2;{$endif}
+      ResetCompilePars;
     RdFldNameFrml:=RdFldNameFrmlT;
     0:Txt:=CalcTxt; Del:=true; I:=1;
     1:TxtEdCtrlUBrk:=true; TxtEdCtrlF4Brk:=true;
@@ -663,10 +680,11 @@ var fst,lst:word;
       c1:=whereX;r1:=whereY;
       TextAttr:=colors.pNorm;
       write(' '); CrsNorm; t:=Timer+15; r:=r1;
-      repeat while not KbdPressed do
+      repeat while not KbdPressed do begin
+        {$ifdef FPC}IdleTick(50);{$endif}         { no spinning, a moving Timer }
         if Timer>=t then begin
           t:=Timer+15; if r=r1 then begin gotoxy(c2,r2); r:=r2 end
-          else begin gotoxy(c1,r1); r:=r1 end end;
+          else begin gotoxy(c1,r1); r:=r1 end end end;
         cc:=upcase(char(ReadKbd));
       until cc in [AbbrYes,AbbrNo,_ESC];
       PopW(w);MyVerifyLL:=cc;

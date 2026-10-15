@@ -8,7 +8,7 @@ function RdNextPart:boolean;
         i:word;
     begin Count:=0;Ind:=from;C:=@T^[from];
       for i:=1 to num do
-        begin inc(COfs);if C^=_CR then begin inc(Count);Ind:=from+i end end;
+        begin {$ifdef FPC}inc(C){$else}inc(COfs){$endif};if C^=_CR then begin inc(Count);Ind:=from+i end end;
       if (Count>0)and(T^[Ind+1]=_LF) then inc(Ind);
     end;
   begin      {*****NextPart****}
@@ -61,7 +61,7 @@ function RdPredPart:boolean;
         i:word;
     begin Count:=0;Ind:=from-1;C:=@T^[from];
       for i:=0 to num-1 do
-        begin dec(COfs);if C^=_CR then begin inc(Count);Ind:=from-i end end;
+        begin {$ifdef FPC}dec(C){$else}dec(COfs){$endif};if C^=_CR then begin inc(Count);Ind:=from-i end end;
       if (Count>0)and(T^[Ind+1]=_LF) then inc(Ind);
     end;
   begin      {*****PredPart****}
@@ -140,10 +140,127 @@ procedure RdFirstPart;
     AllRd:=false;ChangePart:=RdNextPart;
   end;
 
+{$ifdef FPC}
+{ A text with Unix line ends, in UTF-8 or with a UTF-8 BOM is edited as a
+  CR LF, CP852 work copy - but only when converting the copy back gives the
+  file's own bytes; anything else (CR LF mixed in, characters CP852 lacks)
+  is edited as it is. The copy goes back into the file on F9, F6, an exit
+  procedure and closing; one that cannot go back is kept beside FANDWORK. }
+var TxtWork,TxtKeep,TxtView,TxtUtf8,TxtLF,TxtBom,TxtUnsaved:boolean;
+    TxtOrig,TxtWorkFor,TxtNew:ansistring;
+const Utf8Bom=#$EF#$BB#$BF;
+function Utf8Valid(const S:ansistring; var Multi:boolean):boolean;
+var i,n:longint; c:byte;
+begin
+  Utf8Valid:=false; Multi:=false; i:=1;
+  while i<=length(S) do begin
+    c:=ord(S[i]);
+    if c<$80 then n:=0 else if c and $E0=$C0 then n:=1
+    else if c and $F0=$E0 then n:=2 else if c and $F8=$F0 then n:=3 else exit;
+    if i+n>length(S) then exit;
+    while n>0 do begin inc(i); if ord(S[i]) and $C0<>$80 then exit; dec(n); Multi:=true end;
+    inc(i) end;
+  Utf8Valid:=true;
+end;
+function LfToCrLf(const S:ansistring):ansistring;
+var r:ansistring; i,j:longint;
+begin
+  j:=0; for i:=1 to length(S) do if S[i]=#10 then inc(j);
+  SetLength(r,length(S)+j); j:=0;
+  for i:=1 to length(S) do begin
+    if S[i]=#10 then begin inc(j); r[j]:=#13 end;
+    inc(j); r[j]:=S[i] end;
+  LfToCrLf:=r;
+end;
+function CrLfToLf(const S:ansistring):ansistring;
+var r:ansistring; i,j:longint;
+begin
+  SetLength(r,length(S)); j:=0;
+  for i:=1 to length(S) do
+    if (S[i]<>#13) or (i=length(S)) or (S[i+1]<>#10) then begin inc(j); r[j]:=S[i] end;
+  SetLength(r,j); CrLfToLf:=r;
+end;
+function ToWork(S:ansistring):ansistring;
+begin
+  if TxtBom then delete(S,1,3);
+  if TxtUtf8 then S:=SUtf8To852(S);
+  if TxtLF then S:=LfToCrLf(S);
+  ToWork:=S;
+end;
+function FromWork(S:ansistring):ansistring;
+begin
+  if TxtLF then S:=CrLfToLf(S);
+  if TxtUtf8 then S:=S852ToUtf8(S);
+  if TxtBom then S:=Utf8Bom+S;
+  FromWork:=S;
+end;
+function WorkTxtPath:string;
+begin WorkTxtPath:=copy(FandWorkName,1,length(FandWorkName)-3)+'E$$' end;
+function CanWrite(const Nm:ansistring):boolean;
+var f:file; fm:byte;
+begin
+  fm:=FileMode; FileMode:=2;
+  {$I-} assign(f,Nm); reset(f,1); FileMode:=fm;
+  CanWrite:=IOResult=0; close(f); if IOResult<>0 then ; {$I+}
+end;
+procedure PrepareTxt(Mode:char);
+var s,w:ansistring; multi:boolean;
+begin
+  if TxtKeep and TxtWork and (TxtWorkFor=CPath) then      { kept over F6 }
+    begin TxtKeep:=false; CPath:=WorkTxtPath; exit end;
+  TxtKeep:=false; TxtWork:=false;
+  if not FandReadFile(UnixPath(CPath),TxtOrig) or (TxtOrig='') then exit;
+  s:=TxtOrig; TxtBom:=copy(s,1,3)=Utf8Bom; if TxtBom then delete(s,1,3);
+  TxtLF:=(pos(#10,s)>0) and (pos(#13,s)=0);
+  { an ASCII text with Unix line ends is taken for UTF-8 as well }
+  TxtUtf8:=Utf8Valid(s,multi) and (multi or TxtBom or TxtLF);
+  if not (TxtBom or TxtUtf8 or TxtLF) then exit;
+  w:=ToWork(TxtOrig); if FromWork(w)<>TxtOrig then exit;
+  { a file FAND may not write opens as it is, and fails as in BP7 }
+  TxtView:=Mode=ViewM; if not TxtView and not CanWrite(UnixPath(CPath)) then exit;
+  if not FandWriteWhole(WorkTxtPath,w,false) then exit;
+  TxtWork:=true; TxtWorkFor:=CPath; CPath:=WorkTxtPath;
+end;
+{ the work copy, read through the editor's handle, back into the file }
+function SaveTxtBack:boolean;
+var w,s:ansistring; n,i:longint; k:word; e:integer;
+begin
+  SaveTxtBack:=true; TxtUnsaved:=false; if not TxtWork or TxtView then exit;
+  n:=FileSizeH(TxtFh); SetLength(w,n); i:=0; SeekH(TxtFh,0);
+  while (i<n) and (HandleError=0) do begin
+    k:=MinL(n-i,$8000); ReadH(TxtFh,k,w[i+1]); inc(i,k) end;
+  if HandleError<>0 then e:=HandleError
+  else begin
+    s:=FromWork(w); if s=TxtOrig then exit;
+    e:=FandReplaceFile(UnixPath(TxtPath),s);
+    if e=0 then TxtOrig:=s else begin TxtNew:=s; TxtUnsaved:=true end end;
+  if e<>0 then begin
+    SaveTxtBack:=false; SetMsgPar(TxtPath); WrLLF10Msg(700+e) end;
+end;
+procedure CloseTxtFh;
+var ok:boolean; i:integer; s:string;
+begin
+  ok:=SaveTxtBack; CloseH(TxtFh);
+  if not TxtWork or TxtKeep then exit; TxtWork:=false;
+  if ok then begin DeleteFile(WorkTxtPath); exit end;
+  { not lost: FANDWORK.E00.. keeps it as the file would be, and the message
+    says where }
+  i:=0;
+  repeat s:=copy(WorkTxtPath,1,length(WorkTxtPath)-2)+chr(48+i div 10)+chr(48+i mod 10);
+    inc(i) until (i=100) or not FandFileExists(UnixPath(s));
+  if FandFileExists(UnixPath(s)) then s:=WorkTxtPath
+  else if TxtUnsaved and FandWriteWhole(UnixPath(s),TxtNew,false) then DeleteFile(WorkTxtPath)
+  else if not FandRename(UnixPath(WorkTxtPath),UnixPath(s)) then s:=WorkTxtPath;
+  TxtNew:=''; Set2MsgPar(FExpand(s),TxtPath); WrLLF10Msg(829);
+end;
+{$else}
+procedure CloseTxtFh; begin CloseH(TxtFh) end;
+{$endif}
 procedure OpenTxtFh(Mode:char);
   var UM:FileUseMode;
   begin
     CPath:=TxtPath; CVol:=TxtVol;TestMountVol(CPath[1]);
+    {$ifdef FPC}PrepareTxt(Mode);{$endif}
     if Mode=ViewM then UM:=RdOnly else UM:=Exclusive;
     TxtFH:=OpenH(_isoldnewfile,UM);
     if HandleError<>0 then begin

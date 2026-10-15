@@ -14,6 +14,20 @@ procedure HMsgExit(s:pathstr);
             4  :RunError(704) end;
   end;
 
+{$ifdef FPC}
+function FindChar(var Num:word;C:char;Pos:word;Len:word):word;
+var i:word; count:word;
+begin
+  count:=0;
+  for i:=Pos to Len do begin
+    if T^[i]=C then begin
+      inc(count);
+      if count=Num then begin FindChar:=i; Num:=count; exit end;
+    end;
+  end;
+  FindChar:=Len; Num:=count;
+end;
+{$else}
 function FindChar(var Num:word;C:char;Pos:word;Len:word):word;
 var I,J,K:word;cc:char;
 begin I:=Len;J:=Num;K:=Pos-1;cc:=C;
@@ -34,6 +48,7 @@ begin I:=Len;J:=Num;K:=Pos-1;cc:=C;
              $89/$96/J    );      {       mov [BP+J],BX      }
       FindChar:=Len-I;Num:=J;
 end;
+{$endif}
 
 (*function FindCharBack(var Num:word;C:char;Pos:word;Len:word):word;
 var I,J,K:word;cc:char;
@@ -60,6 +75,22 @@ function TestOptStr(c:char):boolean;
   begin TestOptStr:=(pos(c,OptionStr)<>0)or(pos(upcase(c),OptionStr)<>0) end;
 
 function FindString(var I:word;Len:word):boolean;
+{$ifdef FPC}
+  function FindUpcChar(C:char;Pos:word;Len:word):word;
+  var i:word;
+  begin
+    for i:=Pos to Len do
+      if UpcCharTab[T^[i]]=UpcCharTab[C] then begin FindUpcChar:=i; exit end;
+    FindUpcChar:=Len;
+  end;
+  function FindOrdChar(C:char;Pos:word;Len:word):word;
+  var i:word;
+  begin
+    for i:=Pos to Len do
+      if CharOrdTab[T^[i]]=CharOrdTab[C] then begin FindOrdChar:=i; exit end;
+    FindOrdChar:=Len;
+  end;
+{$else}
   function FindUpcChar(C:char;Pos:word;Len:word):word;
   var I,K:word;cc:char;
   begin I:=Len;K:=Pos-1;cc:=C;
@@ -101,6 +132,7 @@ function FindString(var I:word;Len:word):boolean;
                $89/$8E/I    );      {       mov [BP+I],CX           }
         FindOrdChar:=Len-I;
   end;
+{$endif}
 function SEquOrder(S1,S2:string):boolean;
   var i:integer;
  begin SEquOrder:=false; if length(S1)<>length(S2) then exit;
@@ -134,6 +166,15 @@ function SEquOrder(S1,S2:string):boolean;
   end;
 
 procedure SetColorOrd(var CO:ColorOrd;First,Last:word);
+{$ifdef FPC}
+  function FindCtrl(F,L:word):word;
+  var i:word;
+  begin
+    for i:=F to L do
+      if T^[i] in [#1,#2,#4,#5,#$11,#$13,#$17] then begin FindCtrl:=i; exit end;
+    FindCtrl:=L+1;
+  end;
+{$else}
   function FindCtrl(F,L:word):word;
     var I,K:word;
     begin I:=L;K:=F-1;
@@ -162,6 +203,7 @@ procedure SetColorOrd(var CO:ColorOrd;First,Last:word);
                  $89/$8E/I);       {  2:  mov [BP+I],CX    }
           FindCtrl:=L-I+1;
     end;
+{$endif}
   var I,pp:word;
       len:byte absolute CO;
   begin I:=FindCtrl(First,Last);
@@ -179,29 +221,5 @@ procedure SimplePrintHead;
     var i,n:word;
     begin val(leadchar(' ',trailchar(' ',copy(ln,4,255))),n,i);
           if i=0 then NN:=n end;
-(*  var s:String3;
-      hefo,cp,pl:word;
-      i,i1,i2:word;
-      auto:boolean;
-  label 1;
-  begin
-{    PHNum:=0;cp:=3;pl:=72;hefo:=0;s:=' ';i:=1;}
-    cp:=spec.CpLines;pl:=spec.AutoRprtLimit+cp;PHNum:=0;hefo:=0;
-    auto:=false;s:=' ';i:=1;
-    while s<>'' do
-      begin i2:=1;i1:=FindChar(i2,_CR,i,LenT);if i1=LenT then goto 1;
-        dec(i1,i);i1:=MinW($FF,i1);ln[0]:=chr(i1);move(T^[i],ln[1],i1);
-        s:=copy(ln,1,3);
-        if SEquUpcase(s,'.cp') then begin inc(PHNum);GetNum(cp);auto:=true end else
-        if SEquUpcase(s,'.pl') then begin inc(PHNum);GetNum(pl) end else
-        if SEquUpcase(s,'.po')or SEquUpcase(s,'.ti')or SEquUpcase(s,'.ff')or SEquUpcase(s,'.nm')
-           then inc(PHNum) else
-        if SEquUpcase(s,'.he')or SEquUpcase(s,'.fo') then
-          begin inc(PHNum);inc(hefo,2);auto:=true end else goto 1;
-        inc(i,i1+1);if T^[i]=_LF then inc(i);
-        if i>LenT then goto 1;
-      end;
-    1:if PHNum<>0 then PPageS:=pl-cp-hefo else PPageS:=$7FFF;
-  end;    *)
   begin PHNum:=0;PPageS:=$7FFF end;
 

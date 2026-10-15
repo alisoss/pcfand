@@ -1,0 +1,8 @@
+{ Hello > World }
+var k:string;
+begin
+  with window(0,0,32,1,='Hello'!) do begin
+    write('        Hello, World!');
+    k:=readkey
+  end
+end;

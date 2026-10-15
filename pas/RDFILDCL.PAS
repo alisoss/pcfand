@@ -15,6 +15,7 @@ procedure RdByteListInStore;
 procedure RdBegViewDcl(EO:EditOptPtr);
 function RdUserView(ViewName:string;EO:EditOptPtr):boolean;
 function RdFileD(const FileName:string;FDTyp:char;Ext:ExtStr):pointer;
+{$ifdef FPC}function RdFileDOld(Pos:longint;const ChptName:string):FileDPtr;{$endif}
 
 
 implementation
@@ -61,7 +62,9 @@ begin
     'D':begin ss[0]:=#0;
         if Lexem=',' then begin RdLex; ss:=LexWord; Accept(_quotedstr) end;
         if ss[0]=#0 then ss:='DD.MM.YY'; S:=StoreStr(ss);
-        FrmlTyp:='R'; NBytes:=sizeof(real); L:=length(S^); inc(Flg,f_Mask) end;
+        FrmlTyp:='R';
+        {$ifdef FPC}NBytes:=6{$else}NBytes:=sizeof(real){$endif};
+        L:=length(S^); inc(Flg,f_Mask) end;
     'B':begin L:=1; NBytes:=1; FrmlTyp:='B' end;
     'T':begin if Lexem=',' then begin RdLex; L:=RdInteger+2 end
         else L:=1; NBytes:=sizeof(longint); HasTT:=true;
@@ -175,6 +178,7 @@ end;
 
 
 var  issql:boolean;
+{$ifdef FPC}var RecompFD:FileDPtr;{$endif}
 
 procedure TestUserView;
 procedure TestDupl(FD:FileDPtr);
@@ -190,7 +194,8 @@ begin
 1:TestIdentif;
   TestDupl(CFile); FD:=FileDRoot;
   while FD<>nil do begin TestDupl(FD);FD:=FD^.Chain end;
-  S:=GetStore(length(LexWord)+5); S^.S:=LexWord; ChainLast(CFile^.ViewNames,S);
+  S:=GetStore(length(LexWord)+1+sizeof(StringList)); S^.S:=LexWord;
+  ChainLast(CFile^.ViewNames,S);
   RdLex; RdByteListInStore; Accept(':'); MarkStore(p);
   EO:=GetEditOpt;
   K:=RdViewKey; if K<>nil then begin Accept(','); EO^.ViewKey:=K end;
@@ -232,7 +237,7 @@ var F:FileDPtr;
 begin
   if (CFile^.Typ<>'X') {$ifdef FandSQL} and not CFile^.typSQLFile {$endif} then Error(108);
   LookForK(Name,CFile); F:=FileDRoot;
-  while F<>nil do begin LookForK(Name,F); F:=F^.Chain end;
+  while F<>nil do begin {$ifdef FPC}if F<>RecompFD then{$endif} LookForK(Name,F); F:=F^.Chain end;
 end;
 function RdFileOrAlias1(F:FileDPtr):KeyDPtr;
 var k:KeyDPtr;
@@ -282,7 +287,7 @@ begin RdLex;
                 begin CheckDuplAlias(Name);RdLex;Accept(')');goto 1 end;
               RdFileOrAlias(FD,K);Accept(')') end
      else RdFileOrAlias(FD,K);
-     L:=FindLD(Name);if L<>nil then OldError(26);
+     L:=FindLD(Name);if (L<>nil){$ifdef FPC} and (L^.FromFD<>RecompFD){$endif} then OldError(26);
      L:=GetZStore(sizeof(L^)-1+length(Name)); L^.Chain:=LinkDRoot;LinkDRoot:=L;
      Move(Name,L^.RoleName,length(Name)+1);
      L^.FromFD:=CFile;L^.ToFD:=FD;L^.ToKey:=K;
@@ -401,28 +406,62 @@ begin with CFile^ do
 end;
 procedure CallRdFDSegment(FD:FileDPtr);
 var rdb,r:RdbDPtr; cr:pointer; cf:FileDPtr; b:boolean; i:word; pos:longint;
+    {$ifdef FPC} st:pointer; dir:DirStr; nm:NameStr; ext:ExtStr;
+    onm:string12; prev,rf:FileDPtr; {$endif}
 begin
   if Lexem<>^z then Accept(';');
   rdb:=CRdb; cr:=CRecPtr; r:=FD^.ChptPos.R;
   if (r=nil) or FD^.IsDynFile then OldError(106);
   CRdb:=r; i:=FD^.ChptPos.IRec;
   CFile:=CRdb^.FD; CRecPtr:=CFile^.RecPtr; ReadRec(i);
-  pos:=_t(ChptOldTxt); if pos<=0 then Error(25);
+  {$ifdef FPC}
+  pos:=_t(ChptTxt);
+  if pos<=0 then Error(25);
+  onm:=trailchar(' ',_shorts(ChptName));
+  prev:=LastInChain(FileDRoot);
+  st:=SaveCompState;
+  SetInpTTPos(pos,r^.Encrypted);
+  FSplit(onm,dir,nm,ext);
+  rf:=RecompFD; RecompFD:=FD; RdFileD(nm,ExtToTyp(ext),ext); RecompFD:=rf;
+  cf:=CFile;
+  RestoreCompState(st);
+  CFile:=cf;
+  if prev<>nil then prev^.Chain:=nil;
+  CFile^.Chain:=nil;
+  b:=true;
+  {$else}
+  pos:=_t(ChptOldTxt);
+  if pos<=0 then Error(25);
   b:=RdFDSegment(i,pos);
+  {$endif}
   cf:=CFile; CRdb:=rdb; if InpRdbPos.IRec<>0 then begin
     CFile:=rdb^.FD; ReadRec(InpRdbPos.IRec); CFile:=cf end;
-  CRecPtr:=cr; if not b then Error(25);
+  CRecPtr:=cr;
+  if not b then Error(25);
   CFile^.OrigFD:=FD; CFile^.TxtPosUDLI:=0;
 end;
+{$ifdef FPC}
+var OrigInpBuf:CompInpD;
+function OrigInp:CompInpDPtr;
+var i:CompInpDPtr;
+begin
+  if PrevCompInp<>nil then begin
+    i:=PrevCompInp; while i^.ChainBack<>nil do i:=i^.ChainBack;
+    OrigInp:=i; exit end;
+  SaveCompInp(@OrigInpBuf);
+  OrigInp:=@OrigInpBuf;
+end;
+{$else}
 function OrigInp:CompInpDPtr;
 var i:CompInpDPtr;
 begin
   i:=CompInpDPtr(@PrevCompInp); while i^.ChainBack<>nil do i:=i^.ChainBack;
   OrigInp:=i;
 end;
+{$endif}
 
                                    {  RdFileD - body }
-const JournalFlds:string[64]=
+const JournalFlds:string{$ifndef FPC}[64]{$endif}=
      'Upd:A,1;RecNr:F,8.0;User:F,4.0;TimeStamp:D,''DD.MM.YYYY hh:mm:ss''';
 var FD:FileDPtr; F,F2:FieldDPtr; p:pointer; C:ChkDPtr; LDOld:LinkDPtr;
     n,i:integer; isHlp:boolean; K:KeyDPtr; Prefix,s:string[32];
@@ -480,14 +519,41 @@ begin
   if Lexem<>^z then CFile^.TxtPosUDLI:=OrigInp^.CurrPos-1;
   if (Lexem='#') and (ForwChar='U') then begin RdLex;TestUserView end;
   MarkStore(p);
-  li:=GetZStore(sizeof(LiRoots)); CFile^.LiOfs:=AbsAdr(li)-AbsAdr(CFile);
+  li:=GetZStore(sizeof(LiRoots));
+  {$ifdef FPC}
+  CFile^.LiOfs:=PtrUInt(li)-PtrUInt(CFile);
+  {$else}
+  CFile^.LiOfs:=AbsAdr(li)-AbsAdr(CFile);
+  {$endif}
   if (Lexem='#') and (ForwChar='D') then begin RdLex;TestDepend end;
   if (Lexem='#') and (ForwChar='L') then begin RdLex;RdChkDChain(Li^.Chks) end;
   if (Lexem='#') and (ForwChar='I') then begin RdLex;RdImpl(Li^.Impls) end;
-  if PtrRec(InpRdbPos.R).Seg=0{compiled from string} then begin
+  if {$ifdef FPC}(InpRdbPos.R=nil){$else}PtrRec(InpRdbPos.R).Seg=0{$endif}{compiled from string} then begin
     CFile^.LiOfs:=0; ReleaseStore(p) end;
   if Lexem<>^z then Error(66);
 1:RdFileD:=p;
 end;
+
+{$ifdef FPC}
+procedure Ovr; far; begin end;
+{ the declaration whose text is at Pos (ChptOldTxt, see WrFDSegment),
+  compiled again beside the current one and unchained; nil if it fails }
+function RdFileDOld(Pos:longint;const ChptName:string):FileDPtr;
+var st:pointer; dir:DirStr; nm:NameStr; ext:ExtStr; rf,prev,fd:FileDPtr;
+    er:ExitRecord;
+label 1;
+begin
+  fd:=nil; prev:=LastInChain(FileDRoot); rf:=RecompFD; st:=SaveCompState;
+  Move(ExitBuf,er,sizeof(ExitRecord)); ExitBuf.OvrEx:=Ovr; ExitBuf.ExP:=ExitP; ExitBuf.BrkP:=BreakP; ExitBuf.mBP:=MyBP;
+    if SetJmp(ExitBuf.JmpBuf)<>0 then begin GoExitFired:=true; fd:=nil; goto 1 end else GoExitFired:=false;
+    KeepInMemory([@st,@rf,@prev,@fd]);
+  SetInpTTPos(Pos,false); FSplit(ChptName,dir,nm,ext);
+  RecompFD:=prev; RdFileD(nm,ExtToTyp(ext),ext); fd:=CFile;
+1:RestoreExit(er); RecompFD:=rf; RestoreCompState(st); IsCompileErr:=false;
+  if prev<>nil then prev^.Chain:=nil;
+  if fd<>nil then fd^.Chain:=nil;
+  RdFileDOld:=fd;
+end;
+{$endif}
 
 end.

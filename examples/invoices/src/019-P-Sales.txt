@@ -1,0 +1,6 @@
+{ sales per customer: the transformation fills SALES, an automatic report
+  lists it }
+begin
+  merge(Summary);
+  report(SALES,(Cust,Name,Invoices,Total),sum=(Invoices,Total));
+end;

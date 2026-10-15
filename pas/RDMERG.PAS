@@ -198,13 +198,20 @@ begin FDNew:=RD^.OD^.FD;RPNew:=RD^.OD^.RecPtr;S:=LexWord;
     if (FD^.Typ=FDNew^.Typ) and FldTypIdentity(F,FNew) and
        (F^.Typ<>'T') and (F^.Flg and f_Stored<>0) and (FNew^.Flg=F^.Flg) then begin
       A^.Kind:=_move; A^.L:=FNew^.NBytes;
-      A^.ToPtr:=Ptr(seg(RPNew^),ofs(RPNew^)+FNew^.Displ);
-      A^.FromPtr:=Ptr(seg(RP^),ofs(RP^)+F^.Displ);
+      A^.ToPtr:={$ifdef FPC}BytePtr(PtrUInt(RPNew)+FNew^.Displ){$else}
+                Ptr(seg(RPNew^),ofs(RPNew^)+FNew^.Displ){$endif};
+      A^.FromPtr:={$ifdef FPC}BytePtr(PtrUInt(RP)+F^.Displ){$else}
+                Ptr(seg(RP^),ofs(RP^)+F^.Displ){$endif};
       if (A1<>nil) and (A1^.Kind=_move) and
+      {$ifdef FPC}
+         (PtrUInt(A1^.FromPtr)+A1^.L=PtrUInt(A^.FromPtr)) and
+         (PtrUInt(A1^.ToPtr)+A1^.L=PtrUInt(A^.ToPtr)) then begin
+      {$else}
          (seg(A1^.FromPtr^)=seg(A^.FromPtr^)) and
          (ofs(A1^.FromPtr^)+A1^.L=ofs(A^.FromPtr^)) and
          (seg(A1^.ToPtr^)=seg(A1^.ToPtr^)) and
          (ofs(A1^.ToPtr^)+A1^.L=ofs(A^.ToPtr^)) then begin
+      {$endif}
         A1^.L:=A1^.L+A^.L;
         ReleaseStore(A); goto 1 end
       end

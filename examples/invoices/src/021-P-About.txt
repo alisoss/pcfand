@@ -1,0 +1,15 @@
+{ the About box }
+var k:string;
+begin
+  with window(0,0,60,10,='About'!) do begin
+    writeln('');
+    writeln('   Invoicing');
+    writeln('   a sample application for PC FAND 4.2x, with every');
+    writeln('   kind of chapter: U F E R M P D I L');
+    writeln('');
+    writeln('   Users: Administrator (admin), Clerk (clerk)');
+    writeln('');
+    write('   Press any key.');
+    k:=readkey
+  end
+end;

@@ -38,6 +38,10 @@ uses dos,obaseww,drivers,oaccess,rdrun,olongstr,
 {$ifdef FandGraph} graph, {$endif}
 {$ifdef FandSQL} channel, {$endif}
      wwmix,rdproc,runproc,runedi,editor;
+{$ifdef FPC}
+function FrmlInline(X:FrmlPtr):pointer;
+begin FrmlInline:=pointer(PtrUInt(X)+sizeof(FrmlElem)) end;
+{$endif}
 
 function CompReal(R1,R2:float;M:integer):integer;
   begin if M>0 then begin R1:=R1*Power10[M];R2:=R2*Power10[M] end;
@@ -189,18 +193,27 @@ begin
             ReleaseStore(S) end;                            {$endif}
   else RunRealStr:=0;
 end end;
+{$ifdef FPC}
+{ as in the base BP7 build, whose patched runtime library made x/0 zero }
+function RDivide(A,B:float):float;
+begin if B=0 then RDivide:=0 else RDivide:=A/B end;
+{$endif}
 function RMod(X:FrmlPtr):float;
   var R1,R2:float;
-  begin R1:=RunReal(X^.P1); R2:=RunReal(X^.P2); RMod:=int(R1-int(R1/R2)*R2) end;
+  begin R1:=RunReal(X^.P1); R2:=RunReal(X^.P2);
+    RMod:=int(R1-int({$ifdef FPC}RDivide(R1,R2){$else}R1/R2{$endif})*R2) end;
 function LastUpdate(Handle:word):float;
   var dt:DateTime;
   begin UnpackTime(GetDateTimeH(Handle),dt);
         LastUpdate:=RDate(dt.year,dt.month,dt.day,dt.hour,dt.min,dt.sec,0) end;
 function TypeDay(R:float):word;
   var i,d:word;
-  begin if (R>=WDaysFirst) and (R<=WDaysLast) then
+  begin
+  {$ifndef FPC}
+  if (R>=WDaysFirst) and (R<=WDaysLast) then
     begin d:=trunc(R-WDaysFirst); for i:=1 to NWDaysTab do
      if WDaysTab^[i].Nr=d then begin TypeDay:=WDaysTab^[i].Typ; exit end end;
+  {$endif}
     d:=longint(trunc(R)) mod 7; case d of 0:d:=2{Su};6:d:=1{Sa};else d:=0 end;
     TypeDay:=d end;
 function AddWDays(R:float;N:integer;d:word):float;
@@ -285,23 +298,31 @@ begin
     'S':begin s:=RunShortStr(z); p:=@s end;
     'B':begin b:=RunBool(z); p:=@b end;
     'R':begin r:=RunReal(z); p:=@r end end;
+  {$ifdef FPC}
+  {$else}
   asm  push ds; mov cl,IntNr; mov ax,FunNr; lds dx,p;
        call @1; int 80H; pop ds; jmp @2;
     @1:pop bx; push cs; push bx;
        mov cs:[bx+1],cl;  ret;  {modify int-instruction; far ret}
     @2:mov @result,ax end;
+  {$endif}
   if z^.Op=_getlocvar then begin
-    p:=ptr(Seg(MyBP^),Ofs(MyBP^)+z^.BPOfs);
+    p:={$ifdef FPC}pointer(PtrUInt(MyBP)+z^.BPOfs){$else}Ptr(Seg(MyBP^),Ofs(MyBP^)+z^.BPOfs){$endif};
     case char(x^.N31) of
     'R': FloatPtr(p)^:=r;
     'S': begin ss:=CopyToLongStr(s); TWork.Delete(LongIntPtr(p)^);
          LongIntPtr(p)^:=TWork.Store(ss); ReleaseStore(ss) end;
     'B': BooleanPtr(p)^:=b end end;
 end;
+{$ifdef FPC}
+function PortIn(IsWord:boolean;Port:word):word;
+begin PortIn:=0;  end;
+{$else}
 function PortIn(IsWord:boolean;Port:word):word; assembler;
   asm mov dx,Port; xor ax,ax; cmp IsWord,0; je @1; in ax,dx; jmp @2;
 @1:   in al,dx;
 @2: end;
+{$endif}
 
   var R:float; cf:FileDPtr; md:LockMode; b:boolean;
   RecNo:longint; p:pointer absolute RecNo; cr:pointer;  {$ifdef FandGraph}
@@ -313,7 +334,8 @@ function PortIn(IsWord:boolean;Port:word):word; assembler;
     if X=nil then RunReal:=0. else
    1:case X^.Op of
     _field  :RunReal:=_r(X^.Field);
-    _getlocvar:RunReal:=FloatPtr(Ptr(Seg(MyBP^),Ofs(MyBP^)+X^.BPOfs))^;
+    _getlocvar:RunReal:=FloatPtr({$ifdef FPC}pointer(PtrUInt(MyBP)+X^.BPOfs){$else}Ptr(Seg(MyBP^),
+      Ofs(MyBP^)+X^.BPOfs){$endif})^;
     _const  :RunReal:=X^.R;
     _plus   :RunReal:=RunReal(x^.p1)+RunReal(x^.p2);
     _minus  :RunReal:=RunReal(X^.P1)-RunReal(X^.P2);
@@ -327,7 +349,7 @@ function PortIn(IsWord:boolean;Port:word):word; assembler;
                    RunReal:=RunReal(X^.P1); CFile:=cf;CRecPtr:=cr end;
     _eval:   begin MarkStore(p); RunReal:=RunReal(GetEvalFrml(X));
                    ReleaseStore(p) end;
-    _divide :RunReal:=RunReal(X^.P1)/RunReal(X^.P2);
+    _divide :RunReal:={$ifdef FPC}RDivide(RunReal(X^.P1),RunReal(X^.P2)){$else}RunReal(X^.P1)/RunReal(X^.P2){$endif};
     _cond:begin 2:if X^.P1<>nil then
                   if not RunBool(X^.P1) then
                      begin if X^.P3=nil then begin RunReal:=0;exit end;
@@ -339,7 +361,7 @@ function PortIn(IsWord:boolean;Port:word):word; assembler;
                    RunReal:=RunReal(X^.Frml);
                    CFile:=cf;CRecPtr:=cr end;
     _getwordvar:RunReal:=int(WordVarArr[X^.N01]);
-    _div    :RunReal:=int(RunReal(X^.P1)/RunReal(X^.P2));
+    _div    :RunReal:=int({$ifdef FPC}RDivide(RunReal(X^.P1),RunReal(X^.P2)){$else}RunReal(X^.P1)/RunReal(X^.P2){$endif});
     _mod    :RunReal:=RMod(X);
     _unminus:RunReal:=-RunReal(X^.P1);
     _today  :RunReal:=Today;
@@ -380,7 +402,7 @@ function PortIn(IsWord:boolean;Port:word):word; assembler;
                     RunReal:=_r(X^.RecFldD); ReleaseStore(CRecPtr);
                     CFile:=cf;CRecPtr:=cr end;
     _link:RunReal:=LinkProc(X);
-    _memavail:RunReal:=int(StoreAvail);
+    _memavail:{$ifdef FPC}if StoreAvail>655360 then RunReal:=655360.0 else{$endif} RunReal:=int(StoreAvail);
     _maxcol:  RunReal:=int(TxtCols);
     _maxrow:  RunReal:=int(TxtRows);    {$ifdef FandGraph}
     _getmaxx: if IsGraphMode then begin
@@ -415,6 +437,24 @@ function RunInt(Z:FrmlPtr):longint;
   begin RunInt:=trunc(RunReal(Z)) end;
 
 function RunLongStr(X:FrmlPtr):LongStrPtr;
+{$ifdef FPC}
+procedure ConcatLongStr(S1,S2:LongStrPtr);
+var n:word;
+begin
+  n:=S2^.LL; if n>MaxLStrLen-S1^.LL then n:=MaxLStrLen-S1^.LL;
+  Move(S2^.A[1],S1^.A[S1^.LL+1],n); inc(S1^.LL,n);
+end;
+procedure CopyLongStr(S:LongStrPtr;From,Number:word);
+var avail:word;
+begin
+  if From>0 then dec(From);
+  if From>=S^.LL then begin S^.LL:=0; exit end;
+  avail:=S^.LL-From;
+  if avail<Number then Number:=avail;
+  S^.LL:=Number;
+  if From>0 then Move(S^.A[From+1],S^.A[1],Number);
+end;
+{$else}
 procedure ConcatLongStr(S1,S2:LongStrPtr); assembler;
 asm  push ds; cld; lds si,S1; les di,S2; mov ax,MaxLStrLen;
      mov dx,[si]; sub ax,dx;
@@ -430,6 +470,7 @@ asm  push ds; les si,S; mov ax,es; mov ds,ax; cld;
 @2:  mov [si],cx; lea di,[si+2]; lea si,[si+2+bx]; rep movsb;
 @3:  pop ds;
 end;
+{$endif}
 procedure AddToLongStr(S:LongStrPtr;P:pointer;L:word);
 var p2:pointer;
 begin
@@ -497,9 +538,18 @@ begin
   _readkey :begin
             ReadKbd; s[1]:=char(lo(KbdChar)); s[0]:=#1;
             if s[1]=#0 then begin
+        {$ifdef FPC}
+        begin
+          if hi(KbdChar)=0 then s[2]:=#3
+          else if hi(KbdChar)=3 then s[2]:=chr($84)
+          else s[2]:=chr(hi(KbdChar));
+          s[0]:=#2;
+        end
+        {$else}
         asm  mov al,KbdChar[1].byte; cmp al,0; jne @1; mov al,03H; jmp @2;
          @1: cmp al,03H; jne @2; mov al,84H;
-         @2: mov s[2].byte,al; mov s.byte,2 end end
+         @2: mov s[2].byte,al; mov s.byte,2 end
+        {$endif} end
             end;
   _username:s:=UserName;
   _accright:s:=AccRight;
@@ -540,6 +590,20 @@ begin
   ReleaseStore(s); s:=GetStore(n+1); s^.LL:=n-1; move(s2^.A,s^.A,n-1);
   ReleaseStore2(p2); RunSelectStr:=s;
 end;
+{$ifdef FPC}
+procedure LowCase(S:LongStrPtr);
+var i:word; c:char; j:integer;
+begin
+  for i:=1 to S^.LL do begin
+    c:=S^.A[i];
+    if (c>='A') and (c<='Z') then S^.A[i]:=chr(ord(c)+32)
+    else if c>=#$80 then begin
+      for j:=128 to 255 do
+        if (UpcCharTab[chr(j)]=c) and (chr(j)<>c) then begin S^.A[i]:=chr(j); break end;
+    end;
+  end;
+end;
+{$else}
 procedure LowCase(S:LongStrPtr); assembler;
 asm  push ds; mov ax,ds; mov es,ax; lea bx,UpcCharTab[128];
      lds si,S; cld; lodsw; mov cx,ax; jcxz @6;
@@ -552,17 +616,19 @@ asm  push ds; mov ax,ds; mov es,ax; lea bx,UpcCharTab[128];
 @5:  mov [si],al; inc si; loop @1;
 @6:  pop ds;
 end;
+{$endif}
   var S:LongStrPtr; b:boolean;
       I:word;  md:LockMode absolute I;   J:integer absolute I;
       RecNo:longint; N:word absolute RecNo; L1:longint absolute RecNo;
       cf:FileDPtr; cr:pointer; L2:longint absolute cr;
-      p:pointer absolute RecNo;
+      p:pointer {$ifndef FPC}absolute RecNo{$endif};
   label 1,2;
   begin
     if X=nil then RunLongStr:=GetZStore(2) else
    1:case X^.Op of
     _field  :RunLongStr:=_longs(X^.Field);
-    _getlocvar :RunLongStr:=TWork.Read(1,LongintPtr(Ptr(Seg(MyBP^),Ofs(MyBP^)+X^.BPOfs))^);
+    _getlocvar :RunLongStr:=TWork.Read(1,LongintPtr({$ifdef FPC}pointer(PtrUInt(MyBP)+X^.BPOfs){$else}Ptr(Seg(MyBP^),
+      Ofs(MyBP^)+X^.BPOfs){$endif})^);
     _access :begin cf:=CFile;cr:=CRecPtr;
                    CFile:=X^.File2; md:=NewLMode(RdMode);
                    if X^.LD<>nil then begin CFile:=cf; LinkUpw(X^.LD,RecNo,true) end
@@ -627,12 +693,19 @@ end;
   end;
 
 function RunShortStr(X:FrmlPtr):string;
-var s:LongStrPtr;
+var s:LongStrPtr; n:word; {$ifdef FPC}tmp:string;{$endif}
 begin
   s:=RunLongStr(X);
+  {$ifdef FPC}
+  n:=s^.LL; if n>255 then n:=255;
+  tmp[0]:=chr(n);
+  if n>0 then Move(s^.A[1],tmp[1],n);
+  RunShortStr:=tmp;
+  {$else}
   asm  push ds; cld; les di,@result; lds si,s;
        lodsw; cmp ax,255; jna @1; mov ax,255;
   @1:  mov cx,ax; stosb; rep movsb; pop ds end;
+  {$endif}
   ReleaseStore(s);
 end;
 
@@ -643,13 +716,13 @@ var LOffs:word absolute L; Cr:^float absolute L; I,N:integer;
 label 1;
 begin
   InReal:=true;
-1:N:=L^;inc(LOffs); if N=0 then begin InReal:=false;exit end;
+1:N:=L^;{$ifdef FPC}inc(L){$else}inc(LOffs){$endif}; if N=0 then begin InReal:=false;exit end;
   if N=$FF then
-    if CompReal(R,Cr^,M)=ord(_lt) then inc(LOffs,2*sizeof(float))
-    else begin inc(LOffs,sizeof(float));
-      if CompReal(R,Cr^,M)<>ord(_gt) then exit; inc(LOffs,sizeof(float)) end
+    if CompReal(R,Cr^,M)=ord(_lt) then {$ifdef FPC}inc(L,2*sizeof(float){$else}inc(LOffs,2*sizeof(float){$endif})
+    else begin {$ifdef FPC}inc(L,sizeof(float){$else}inc(LOffs,sizeof(float){$endif});
+      if CompReal(R,Cr^,M)<>ord(_gt) then exit; {$ifdef FPC}inc(L,sizeof(float){$else}inc(LOffs,sizeof(float){$endif}) end
   else for I:=1 to N do
-    if CompReal(R,Cr^,M)=ord(_equ) then exit else inc(LOffs,sizeof(float));
+    if CompReal(R,Cr^,M)=ord(_equ) then exit else {$ifdef FPC}inc(L,sizeof(float){$else}inc(LOffs,sizeof(float){$endif});
   goto 1;
 end;
 function LexInStr(S:LongStrPtr;L:BytePtr):boolean;
@@ -657,14 +730,14 @@ var LOffs:word absolute L; Cs:StringPtr absolute L; I,N:integer;
 label 1;
 begin
   LexInStr:=true;
-1:N:=L^;inc(LOffs); if N=0 then begin LexInStr:=false;exit end;
+1:N:=L^;{$ifdef FPC}inc(L){$else}inc(LOffs){$endif}; if N=0 then begin LexInStr:=false;exit end;
   if N=$FF then
     if CompLexLongShortStr(S,Cs)=ord(_lt) then begin
-      inc(LOffs,L^+1); inc(LOffs,L^+1) end
-    else begin inc(LOffs,L^+1);
-      if CompLexLongShortStr(S,Cs)<>ord(_gt) then exit; inc(LOffs,L^+1) end
+      {$ifdef FPC}inc(L,L^+1){$else}inc(LOffs,L^+1){$endif}; {$ifdef FPC}inc(L,L^+1){$else}inc(LOffs,L^+1){$endif} end
+    else begin {$ifdef FPC}inc(L,L^+1){$else}inc(LOffs,L^+1){$endif};
+      if CompLexLongShortStr(S,Cs)<>ord(_gt) then exit; {$ifdef FPC}inc(L,L^+1){$else}inc(LOffs,L^+1){$endif} end
   else for I:=1 to N do
-    if CompLexLongShortStr(S,Cs)=ord(_equ) then exit else inc(LOffs,L^+1);
+    if CompLexLongShortStr(S,Cs)=ord(_equ) then exit else {$ifdef FPC}inc(L,L^+1){$else}inc(LOffs,L^+1){$endif};
   goto 1;
 end;
 function InStr(S:LongStrPtr;L:BytePtr):boolean;
@@ -672,25 +745,29 @@ var LOffs:word absolute L; Cs:StringPtr absolute L; I,N:integer;
 label 1;
 begin
   InStr:=true;
-1:N:=L^;inc(LOffs); if N=0 then begin InStr:=false;exit end;
+1:N:=L^;{$ifdef FPC}inc(L){$else}inc(LOffs){$endif}; if N=0 then begin InStr:=false;exit end;
   if N=$FF then
     if CompLongShortStr(S,Cs)=ord(_lt) then begin
-      inc(LOffs,L^+1); inc(LOffs,L^+1) end
-    else begin inc(LOffs,L^+1);
-      if CompLongShortStr(S,Cs)<>ord(_gt) then exit; inc(LOffs,L^+1) end
+      {$ifdef FPC}inc(L,L^+1){$else}inc(LOffs,L^+1){$endif}; {$ifdef FPC}inc(L,L^+1){$else}inc(LOffs,L^+1){$endif} end
+    else begin {$ifdef FPC}inc(L,L^+1){$else}inc(LOffs,L^+1){$endif};
+      if CompLongShortStr(S,Cs)<>ord(_gt) then exit; {$ifdef FPC}inc(L,L^+1){$else}inc(LOffs,L^+1){$endif} end
   else for I:=1 to N do
-    if CompLongShortStr(S,Cs)=ord(_equ) then exit else inc(LOffs,L^+1);
+    if CompLongShortStr(S,Cs)=ord(_equ) then exit else {$ifdef FPC}inc(L,L^+1){$else}inc(LOffs,L^+1){$endif};
   goto 1;
 end;
 function RunModulo(X:FrmlPtr):boolean;
-var S:string; I,M,N:integer; B1:WordPtr; B1Offs:word absolute B1;
+var S:string; I,M,N:integer; B1:WordPtr; B1Offs:word absolute B1; Md:word;
 begin
   N:=X^.W11; S:=RunShortStr(X^.P1);
   if Length(S)<>N then begin RunModulo:=false; exit end;
-  M:=0; B1:=@X^.W21;
+  { RdFrml stores n and the weights right after the element: in BP7 that was
+    W12 and W21..; here they follow the whole record }
+  {$ifdef FPC}B1:=FrmlInline(X); Md:=B1^; inc(B1);
+  {$else}Md:=X^.W12; B1:=@X^.W21;{$endif}
+  M:=0;
   for I:=1 to N-1 do begin
-    M:=M+B1^*(ord(S[I]) and $0F);inc(B1Offs,2) end;
-  I:=(X^.W12-(M mod X^.W12)) mod 10;
+    M:=M+B1^*(ord(S[I]) and $0F);{$ifdef FPC}inc(B1){$else}inc(B1Offs,2){$endif} end;
+  I:=(Md-(M mod Md)) mod 10;
   if I=(ord(S[N]) and $0F) then RunModulo:=true else RunModulo:=false;
 end;
 function RunEquMask(X:FrmlPtr):boolean;
@@ -703,7 +780,7 @@ end;
 var RecNo:longint; res:word absolute RecNo;
     S,S2:LongStrPtr; b:boolean absolute S;
     w1:word absolute RecNo; w2:word absolute S;
-    cf:FileDPtr; cr:pointer; p:pointer absolute RecNo;
+    cf:FileDPtr; cr:pointer; p:pointer {$ifndef FPC}absolute RecNo{$endif};
 label 1,2;
 begin
   if X=nil then begin RunBool:=True;exit end;
@@ -716,10 +793,10 @@ begin
     _lequ:if RunBool(X^.P1)=RunBool(X^.P2) then RunBool:=True
            else RunBool:=False;
     _instr:begin S:=RunLongStr(X^.P1);
-           if X^.N11=1 then RunBool:=LexInStr(LongTrailChar(' ',#0,S),@X^.N12)
-           else RunBool:=InStr(S,@X^.N12);
+           if X^.N11=1 then RunBool:=LexInStr(LongTrailChar(' ',#0,S),{$ifdef FPC}FrmlInline(X){$else}@X^.N12{$endif})
+           else RunBool:=InStr(S,{$ifdef FPC}FrmlInline(X){$else}@X^.N12{$endif});
            ReleaseStore(S) end;
-    _inreal:begin RunBool:=InReal(RunReal(X^.P1),@X^.N12,X^.N11) end;
+    _inreal:begin RunBool:=InReal(RunReal(X^.P1),{$ifdef FPC}FrmlInline(X){$else}@X^.N12{$endif},X^.N11) end;
     _compreal:begin RunBool:=
             (CompReal(RunReal(X^.P1),RunReal(X^.P2),X^.N22) and X^.N21)<>0 end;
     _compstr:begin S:=RunLongStr(X^.P1); S2:=RunLongStr(X^.P2);
@@ -735,7 +812,8 @@ begin
               ((Event.Buttons and X^.W02)=X^.W02) then RunBool:=true end;
     _mousein: begin w1:=RunInt(X^.P1); w2:=RunInt(X^.P2);
               RunBool:=MouseInRectProc(w1,w2,RunInt(X^.P3)-w1+1,RunInt(X^.P4)-w2+1) end;
-    _getlocvar:RunBool:=BooleanPtr(Ptr(Seg(MyBP^),Ofs(MyBP^)+X^.BPOfs))^;
+    _getlocvar:RunBool:=BooleanPtr({$ifdef FPC}pointer(PtrUInt(MyBP)+X^.BPOfs){$else}Ptr(Seg(MyBP^),
+      Ofs(MyBP^)+X^.BPOfs){$endif})^;
     _modulo:RunBool:=RunModulo(X);
     _field  :RunBool:=_b(X^.Field);
     _access :begin cf:=CFile;cr:=CRecPtr;
@@ -767,7 +845,7 @@ begin
                     CRecPtr:=cr; CFile:=cf end;
     _lvdeleted:begin cr:=CRecPtr; cf:=CFile; CRecPtr:=X^.LV^.RecPtr; CFile:=X^.LV^.FD;
            RunBool:=DeletedFlag; CRecPtr:=cr; CFile:=cf end;
-    _trust:RunBool:=(UserCode=0) or OverlapByteStr(@X^.N01,@AccRight);
+    _trust:RunBool:=(UserCode=0) or OverlapByteStr({$ifdef FPC}FrmlInline(X){$else}@X^.N01{$endif},@AccRight);
     _isnewrec:RunBool:=TestIsNewRec;
     _testmode:RunBool:=IsTestRun;
     _equmask:RunBool:=RunEquMask(X);
@@ -791,7 +869,8 @@ begin
   _getlocvar : begin
            if (F<>nil) and (F^.Flg and f_Encryp<>0) then exit;
            TFD02:=CFile; TF02:=@TWork;
-           TF02Pos:=LongintPtr(Ptr(Seg(MyBP^),Ofs(MyBP^)+Z^.BPOfs))^ end;
+           TF02Pos:=LongintPtr({$ifdef FPC}pointer(PtrUInt(MyBP)+Z^.BPOfs){$else}Ptr(Seg(MyBP^),
+             Ofs(MyBP^)+Z^.BPOfs){$endif})^ end;
   _access : begin cf:=CFile; MarkStore(p); CFile:=Z^.File2;
            md:=NewLMode(RdMode);
            if Z^.LD<>nil then begin CFile:=cf; LinkUpw(Z^.LD,n,true) end

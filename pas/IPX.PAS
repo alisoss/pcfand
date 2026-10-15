@@ -131,7 +131,8 @@ begin { interrupts disabled; es:di points to Ecb }
 end;{$S+}
 
 function Connect(aUsrPostProc:TUserPostProc{;SrvLan:longint}):word;
-var retry:word; EndTime:longint; Timer:longint absolute 0:$46C;
+var retry:word; EndTime:longint;
+    {$ifdef FPC}Timer:longint;{$else}Timer:longint absolute 0:$46C;{$endif}
 label 1,2,3;
 begin
   UsrPostProc:=aUsrPostProc;

@@ -21,10 +21,12 @@ implementation
 uses oaccess,rdfildcl,runfrml;
 
 procedure Ovr; far;
+{$ifdef FPC}begin end;{$else}
 assembler;
 asm   pop ax; pop ax; pop ax{bp}; push ax; push ax; call StackOvr;
       pop bp; pop ds; pop ax; pop dx; pop sp; push cs; push ax;
 end;
+{$endif}
 
 
 var IsRdUserFunc:boolean;
@@ -207,7 +209,8 @@ begin
         if N>30 then Error(123); Arg[N]:=RdFrml(Typ);
         if Typ<>KF^.FldD^.FrmlTyp then OldError(12); KF:=KF^.Chain end end
     else begin Accept(',');N:=1;Arg[1]:=RdRealFrml end;
-    Z:=GetOp(Op,(N+2)*4); Z^.FD:=FD; Z^.Key:=K; Move(Arg,Z^.Arg,4*N);
+    Z:=GetOp(Op,(N+2)*4); Z^.FD:=FD; Z^.Key:=K;
+    Move(Arg,Z^.Arg,sizeof(FrmlPtr)*N);
     if FTyp='R' then goto 2 end
   else if IsKeyWord('LINK') then begin
     RdLex; Z:=GetOp(_link,5);
@@ -264,10 +267,19 @@ begin
   Accept(')'); RdFunctionP:=Z; FFTyp:=FTyp;
 end;
 
-function GetPInstr(Kind:PInstrCode;Size:word):InstrPtr;
+function GetPInstrN(Kind:PInstrCode;Size,Extra:word):InstrPtr;
 var PD:InstrPtr;
 begin
-  PD:=GetZStore(Size+5); PD^.Kind:=Kind; GetPInstr:=PD;
+  {$ifdef FPC}
+  PD:=GetZStore(sizeof(Instr)+Extra);
+  {$else}
+  PD:=GetZStore(Size+5);
+  {$endif}
+  PD^.Kind:=Kind; GetPInstrN:=PD;
+end;
+function GetPInstr(Kind:PInstrCode;Size:word):InstrPtr;
+begin
+  GetPInstr:=GetPInstrN(Kind,Size,0);
 end;
 
 function RdPInstr:InstrPtr;forward;
@@ -446,7 +458,7 @@ begin
     if Lexem=',' then begin RdLex; goto 1 end;
     Accept(')') end;
   if Caller='E' then begin inc(N); TArg[N].FTyp:='r' end;
-  L:=N*sizeof(TypAndFrml); PD:=GetPInstr(_proc,sizeof(RdbPos)+2+L);
+  L:=N*sizeof(TypAndFrml); PD:=GetPInstrN(_proc,sizeof(RdbPos)+2+L,L);
   PD^.Pos:=Pos; PD^.N:=N; Move(TArg,PD^.TArg,L);
   PD^.ExPar:=(Caller='E'); RdProcArg:=PD;
 end;
@@ -1111,7 +1123,7 @@ begin
     k:=RdViewKey; if k=nil then k:=CFile^.Keys; sqlKey:=k; Accept(',');
     sqlFldD:=RdFldName(CFile); Accept(','); sqlXStr:=RdStrFrml;
     if not sqlFD^.typSQLFile or (sqlFldD^.Typ<>'T') then OldError(170) end;
-end;          {$endif}  {$ifdef FandProlog}
+end;          {$endif}  {$ifdef FandLProc}
 procedure RdCallLProc;
 var pd:InstrPtr;
 begin
@@ -1163,9 +1175,9 @@ begin
   else if IsKeyWord('DELAY') then begin PD:=GetPD(_delay,4); goto 2 end
   else if IsKeyWord('SOUND') then begin PD:=GetPD(_sound,4);
 2:  PD^.Frml:=RdRealFrml end
-  {$ifdef FandProlog}
+  {$ifdef FandLProc}
   else if IsKeyWord('LPROC') then RdCallLProc {$endif}
-  {$ifdef FandGraph}
+  {$ifdef FandGraphParse}
   else if IsKeyWord('GRAPH') then RdGraphP
   else if IsKeyWord('PUTPIXEL') then begin PD:=GetPD(_putpixel,3*4); goto 3 end
   else if IsKeyWord('LINE') then begin PD:=GetPD(_line,5*4); goto 3 end
@@ -1433,7 +1445,9 @@ begin
   RdFldNameFrml:=RdFldNameFrmlP; RdFunction:=RdFunctionP;
   if X^.EvalFD=nil then FileVarsAllowed:=false else begin
     CFile:=X^.EvalFD; FileVarsAllowed:=true end;
-  NewExit(Ovr,er); goto 1;
+  {$ifdef FPC}Move(ExitBuf,er,sizeof(ExitRecord)); ExitBuf.OvrEx:=Ovr; ExitBuf.ExP:=ExitP; ExitBuf.BrkP:=BreakP;
+    ExitBuf.mBP:=MyBP; if SetJmp(ExitBuf.JmpBuf)<>0 then begin GoExitFired:=true; goto 1 end else GoExitFired:=false;
+    KeepInMemory([@p,@cr,@s,@z,@z1,@fTyp,@cpos,@cf,@oldLVBD,@oldbp]);{$else}NewExit(Ovr,er); goto 1;{$endif}
   SetInpLongStr(s,false); RdLex; z:=RdFrml(fTyp);
   if (fTyp<>X^.EvalTyp) or (Lexem<>^z) then z:=nil else LastExitCode:=0;
 1:cpos:=CurrPos; RestoreExit(er); RestoreCompState(p);

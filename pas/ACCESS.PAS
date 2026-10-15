@@ -51,11 +51,13 @@ type
   FrmlElem=record Op:char;
                   case byte of
                    0:(P1,P2,P3,P4,P5,P6:FrmlPtr;Delim:char);
-                   1:(N01,N02,N03,N04,
-                      N11,N12,N13,N14,
-                      N21,N22,N23,N24,
+                   1:(N01,N02,N03,N04:byte; {$ifdef FPC}Npad0:array[1..4] of byte;{$endif}
+                      N11,N12,N13,N14:byte; {$ifdef FPC}Npad1:array[1..4] of byte;{$endif}
+                      N21,N22,N23,N24:byte; {$ifdef FPC}Npad2:array[1..4] of byte;{$endif}
                       N31:byte);
-                   1:(W01,W02,W11,W12,W21,W22:word);
+                   1:(W01,W02:word; {$ifdef FPC}Wpad0:array[1..4] of byte;{$endif}
+                      W11,W12:word; {$ifdef FPC}Wpad1:array[1..4] of byte;{$endif}
+                      W21,W22:word);
                    2:(R:float);
                    4:(S:string);
                    5:(B:boolean);
@@ -150,7 +152,7 @@ type
     Reserved,CompileProc,CompileAll:boolean;
     IRec:word;
     FreeRoot,MaxPage:longint;
-    TimeStmp:real;
+    TimeStmp:{$ifdef FPC}array[1..6] of byte{$else}real{$endif};
     LicenseNr:integer;
     MLen:longint;
     PwCode,Pw2Code:PwCodeArr;
@@ -198,7 +200,8 @@ type
     XF:XFilePtr;
     Keys:KeyDPtr;
     Add:AddDPtr;
-    nLDs,LiOfs:word;
+    nLDs:word;
+    LiOfs:{$ifdef FPC}PtrUInt{$else}word{$endif};
     Name:NameStr;
     function UsedFileSize:longint;
     function IsShared:boolean;
@@ -271,6 +274,7 @@ type
     procedure StoreF(var F;Len:word; Descend:boolean);
     procedure StoreA(var A;Len:word; CompLex,Descend:boolean);
   end;
+  XPageOfs={$ifdef FPC}PtrUInt{$else}word{$endif};
   XItemPtr=^XItem;
   XItem = object
     Nr:array[1..3] of byte; {NN: RecNr /on leaf/ or NumberofRecordsBelow}
@@ -284,7 +288,7 @@ type
     function GetL(O:word):word;
     procedure PutL(O:word;L:word);
     function Next(O:word):XItemPtr;
-    function UpdStr(O:word;S:StringPtr):word;
+    function UpdStr(O:word;S:StringPtr):XPageOfs;
   end;
   XPagePtr=^XPage;
   XPage = object
@@ -294,7 +298,7 @@ type
     A:array[1..XPageSize-4]of byte;            { item array }
     function Off:word;
     function XI(I:word):XItemPtr;
-    function EndOff:word;
+    function EndOff:XPageOfs;
     function Underflow:boolean;
     function Overflow:boolean;
     function StrI(I:word):string;
@@ -526,6 +530,12 @@ const Power10:array[0..20] of float=(1E0,1E1,1E2,1E3,1E4,1E5,1E6,1E7,1E8,1E9,
          1E10,1E11,1E12,1E13,1E14,1E15,1E16,1E17,1E18,1E19,1E20);
 
 procedure RunErrorM(Md:LockMode;N:word);
+{$ifdef FPC}
+ function CompLongStr(S1,S2:LongStrPtr):integer;
+ function CompStr(S1,S2:string):integer;
+ function CompLongShortStr(S1:LongStrPtr;S2:StringPtr):integer;
+ function CompArea(A,B:pointer;L:integer):integer;
+{$else}
  function CompLongStr(S1,S2:LongStrPtr):integer;
   inline($8C/$DA/           {MOV    DX,DS}
          $5F/$07/$5E/$1F/   {POP    DI/ES/SI/DS}
@@ -583,6 +593,7 @@ procedure RunErrorM(Md:LockMode;N:word);
             $72/$03/               {JC  lab1}
             $B8/>4/                {MOV AX,4}
             $8E/$DA           {lab1 MOV DS,DX});
+{$endif}
  function CompLexLongStr(S1,S2:LongStrPtr):word;
  function CompLexLongShortStr(S1:LongStrPtr;S2:StringPtr):word;
  function CompLexStr(const S1,S2:string):word;
@@ -684,6 +695,16 @@ function IsActiveRdb(FD:FileDPtr):boolean;
 
 
 procedure ResetCompilePars;
+{$ifdef FPC}
+procedure SaveCompInp(ci:CompInpDPtr);
+procedure LoadCompInp(ci:CompInpDPtr);
+{$endif}
+{$ifdef FPC}
+function LexOrd(P:PChar; N:word):string;
+{ BP7's 6-byte real, as R and D fields and the .TTT time stamp keep it }
+function Real48ToFloat(p:pointer):float;
+procedure FloatToReal48(R:float;p:pointer);
+{$endif}
 var
   CurrChar:char;                       { Compile }
   ForwChar,ExpChar,Lexem:char;
@@ -719,21 +740,67 @@ uses obaseww,oaccess,runfrml,olongstr,
      expimp;   {OldToNewCat}
 
 
+{$ifdef FPC}procedure NoOvr; begin end;{$else}
 procedure NoOvr; far; assembler;
 asm   pop ax; pop ax; pop ax{bp}; push ax; push ax; call StackOvr;
       pop bp; pop ds; pop ax; pop dx; pop sp; push dx; push ax;
 end;
+{$endif}
 
+{$ifdef FPC}
+function CompLongStr(S1,S2:LongStrPtr):integer;
+var i:word; len1,len2,minlen:word;
+begin
+  len1:=S1^.LL; len2:=S2^.LL;
+  if len1<len2 then minlen:=len1 else minlen:=len2;
+  for i:=1 to minlen do begin
+    if byte(S1^.A[i])<byte(S2^.A[i]) then begin CompLongStr:=ord(_lt); exit end;
+    if byte(S1^.A[i])>byte(S2^.A[i]) then begin CompLongStr:=ord(_gt); exit end;
+  end;
+  if len1<len2 then CompLongStr:=ord(_lt)
+  else if len1>len2 then CompLongStr:=ord(_gt)
+  else CompLongStr:=ord(_equ);
+end;
 
+function CompLongShortStr(S1:LongStrPtr;S2:StringPtr):integer;
+var i:word; len1,len2,minlen:word;
+begin
+  len1:=S1^.LL; if len1>255 then len1:=255;
+  len2:=ord(S2^[0]);
+  if len1<len2 then minlen:=len1 else minlen:=len2;
+  for i:=1 to minlen do begin
+    if byte(S1^.A[i])<byte(S2^[i]) then begin CompLongShortStr:=ord(_lt); exit end;
+    if byte(S1^.A[i])>byte(S2^[i]) then begin CompLongShortStr:=ord(_gt); exit end;
+  end;
+  if len1<len2 then CompLongShortStr:=ord(_lt)
+  else if len1>len2 then CompLongShortStr:=ord(_gt)
+  else CompLongShortStr:=ord(_equ);
+end;
+function CompArea(A,B:pointer;L:integer):integer;
+var i:integer;
+type TBA=array[0..MaxInt-1] of byte;
+begin
+  for i:=0 to L-1 do begin
+    if TBA(A^)[i]<TBA(B^)[i] then begin CompArea:=ord(_lt); exit end;
+    if TBA(A^)[i]>TBA(B^)[i] then begin CompArea:=ord(_gt); exit end;
+  end;
+  CompArea:=ord(_equ);
+end;
+{$endif}
 
 procedure RunErrorM(Md:LockMode;N:word);
 begin OldLMode(Md); RunError(N) end;
 
 
 
+{$ifdef FPC}
+function FieldDMask(F:FieldDPtr):StringPtr;
+begin FieldDMask:=StringPtr(@F^.Name[length(F^.Name)+1]); end;
+{$else}
 function FieldDMask(F:FieldDPtr):StringPtr; assembler;
 asm  les di,F; mov dx,es; lea ax,es:[di+1].FieldDescr.Name;
      mov bl,es:[di].FieldDescr.Name.byte; xor bh,bh; add ax,bx end;
+{$endif}
      
 {$S-}
 function GetRecSpace:pointer;
@@ -743,6 +810,22 @@ function GetRecSpace2:pointer;
   begin GetRecSpace2:=GetZStore2(CFile^.RecLen+2) end;
 function CFileRecSize:word;
   begin CFileRecSize:=CFile^.RecLen+2 end;
+{$ifdef FPC}
+procedure SetTWorkFlag;
+begin PByteArray(CRecPtr)^[CFile^.RecLen]:=1; end;
+procedure ClearTWorkFlag;
+begin PByteArray(CRecPtr)^[CFile^.RecLen]:=0; end;
+function HasTWorkFlag:boolean;
+begin HasTWorkFlag:=PByteArray(CRecPtr)^[CFile^.RecLen]<>0; end;
+procedure SetUpdFlag;
+begin PByteArray(CRecPtr)^[CFile^.RecLen+1]:=1; end;
+procedure ClearUpdFlag;
+begin PByteArray(CRecPtr)^[CFile^.RecLen+1]:=0; end;
+function HasUpdFlag:boolean;
+begin HasUpdFlag:=PByteArray(CRecPtr)^[CFile^.RecLen+1]<>0; end;
+function LocVarAd(LV:LocVarPtr):pointer;
+begin LocVarAd:=pointer(PtrUInt(MyBP)+LV^.BPOfs); end;
+{$else}
 procedure SetTWorkFlag; assembler;
 asm  les di,CFile; mov bx,es:[di].FileD.RecLen; les di,CRecPtr;
      mov es:[di+bx].byte,1 end;
@@ -766,8 +849,121 @@ asm  les di,CFile; mov bx,es:[di].FileD.RecLen; les di,CRecPtr;
 function LocVarAd(LV:LocVarPtr):pointer; assembler;
 asm  les di,LV; mov dx,MyBP[2].word;
      mov ax,MyBP.word; add ax,es:[di].LocVar.BPOfs end;
+{$endif}
 {$S+}
 
+{$ifdef FPC}
+function DeletedFlag:boolean;
+begin
+  if CFile^.Typ='X' then DeletedFlag:=byte(CRecPtr^)<>0
+  else if CFile^.Typ='D' then DeletedFlag:=char(CRecPtr^)='*'
+  else DeletedFlag:=false;
+end;
+procedure ClearDeletedFlag;
+begin if CFile^.Typ='X' then byte(CRecPtr^):=0 else if CFile^.Typ='D' then char(CRecPtr^):=' ' end;
+procedure SetDeletedFlag;
+begin if CFile^.Typ='X' then byte(CRecPtr^):=1 else if CFile^.Typ='D' then char(CRecPtr^):='*' end;
+function CompStr(S1,S2:string):integer;
+var i,len:byte;
+begin
+  if length(S1)<length(S2) then len:=length(S1) else len:=length(S2);
+  for i:=1 to len do begin
+    if S1[i]<S2[i] then begin CompStr:=ord(_lt); exit end;
+    if S1[i]>S2[i] then begin CompStr:=ord(_gt); exit end;
+  end;
+  if length(S1)<length(S2) then CompStr:=ord(_lt)
+  else if length(S1)>length(S2) then CompStr:=ord(_gt)
+  else CompStr:=ord(_equ);
+end;
+{ BP7's TranslateOrd: the characters' places in the national order
+  (CharOrdTab), with Czech "ch" one place of its own, $4A after "h" }
+function LexOrd(P:PChar; N:word):string;
+var r:string; i:integer; k:word; c:char;
+begin
+  if N>255 then N:=255; k:=0;
+  for i:=0 to integer(N)-1 do begin
+    c:=CharOrdTab[P[i]];
+    {$ifndef FandAng}
+    if (c=#$49) and (k>0) and (r[k]=#$43) then begin r[k]:=#$4A; continue end;
+    {$endif}
+    inc(k); r[k]:=c end;
+  r[0]:=chr(k); LexOrd:=r;
+end;
+function CompLexStr(const S1,S2:string):word;
+begin CompLexStr:=CompStr(LexOrd(@S1[1],length(S1)),LexOrd(@S2[1],length(S2))) end;
+function CompLexLongStr(S1,S2:LongStrPtr):word;
+begin CompLexLongStr:=CompStr(LexOrd(@S1^.A[1],S1^.LL),LexOrd(@S2^.A[1],S2^.LL)) end;
+function CompLexLongShortStr(S1:LongStrPtr;S2:StringPtr):word;
+begin CompLexLongShortStr:=CompStr(LexOrd(@S1^.A[1],S1^.LL),LexOrd(@S2^[1],length(S2^))) end;
+procedure Code(var A; L:word);
+type TBA=array[0..65534] of byte;
+var i:word;
+begin if L=0 then exit; for i:=0 to L-1 do TBA(A)[i]:=TBA(A)[i] xor $AA end;
+procedure XDecode(S:LongStrPtr);
+type TBA = array[0..65533] of byte;
+var
+  buf:^TBA;
+  oldL,si,di,bx,src,disp,j:word;
+  flagsRemaining:byte;
+  flagBits,b,RMask,cl:byte;
+begin
+  buf := pointer(S);
+  oldL := word(buf^[0]) or (word(buf^[1]) shl 8);
+  if oldL = 0 then exit;
+  si := 2; di := 2;
+  bx := oldL;
+  disp := word(buf^[bx]) or (word(buf^[bx+1]) shl 8);
+  disp := disp xor $CCCC;
+  si := si + disp;
+  dec(bx);
+  cl := buf^[bx] and 3;
+  RMask := $9C;
+  if cl <> 0 then RMask := byte((RMask shl cl) or (RMask shr (8-cl)));
+  flagsRemaining := 0; flagBits := 0;
+  while si < bx do begin
+    if flagsRemaining = 0 then begin
+      flagBits := buf^[si]; inc(si);
+      flagsRemaining := 8;
+      if si >= bx then break;
+    end;
+    if (flagBits and 1) <> 0 then begin
+      cl := buf^[si]; inc(si);
+      src := word(buf^[si]) or (word(buf^[si+1]) shl 8); inc(si,2);
+      for j := 1 to cl do begin
+        buf^[di] := buf^[src]; inc(src); inc(di);
+      end;
+    end else begin
+      b := buf^[si]; inc(si);
+      RMask := byte((RMask shl 1) or (RMask shr 7));
+      buf^[di] := b xor RMask; inc(di);
+    end;
+    flagBits := flagBits shr 1;
+    dec(flagsRemaining);
+  end;
+  buf^[0] := byte((di - 2) and $FF);
+  buf^[1] := byte(((di - 2) shr 8) and $FF);
+end;
+function EquKFlds(KF1,KF2:KeyFldDPtr):boolean;
+begin
+  EquKFlds:=false; while KF1<>nil do begin
+    if (KF2=nil) or (KF1^.CompLex<>KF2^.CompLex) or (KF1^.Descend<>KF2^.Descend)
+      or (KF1^.FldD^.Name<>KF2^.FldD^.Name) then exit;
+    KF1:=KF1^.Chain; KF2:=KF2^.Chain end;
+  if KF2<>nil then exit; EquKFlds:=true;
+end;
+{ BP7's random generator: the .TTT/.T00 headers are coded with its
+  sequence, so TFile.RdPrefix/WrPrefix must use it, not FPC's }
+var RandSeed:longint;
+function Random(N:word):word;
+begin
+  RandSeed:=longint(longword(RandSeed)*134775813+1);
+  Random:=(longword(RandSeed) shr 16) mod N;
+end;
+{$I type}
+{$I fileacc}
+{$I index}
+{$I recacc}
+{$else}
 function DeletedFlag:boolean; assembler;
 asm  push ds; les di,CRecPtr; lds si,CFile; xor ax,ax;
      cmp [si].FileD.Typ,'X'; jne @1; cmp es:[di].byte,0; je @3; jmp @2;
@@ -917,13 +1113,14 @@ asm  push ds; cld; lds si,S; mov es,S[2].word; mov bx,si;
 @4:  mov ax,di; mov di,S.word; sub ax,di; sub ax,2; stosw;
 @5:  pop ds;
 end;
+{$endif}
 procedure CodingLongStr(S:LongStrPtr);
 begin
   if CFile^.TF^.LicenseNr=0 then Code(S^.A,S^.LL) else XDecode(S);
 end;
 
 procedure DirMinusBackslash(var D:DirStr);
-   begin if (length(D)>3) and (D[length(D)]='\') then dec(D[0]) end;
+   begin if (length(D)>3) and (D[length(D)]={$ifdef FPC}DirectorySeparator{$else}'\'{$endif}) then dec(D[0]) end;
 
 
 function StoreInTWork(S:LongStrPtr):longint;
@@ -957,5 +1154,18 @@ begin
   PrevCompInp:=nil;
 end;
 
+{$ifdef FPC}
+procedure SaveCompInp(ci:CompInpDPtr);
+begin with ci^ do begin
+  ChainBack:=PrevCompInp; InpArrPtr:=Access.InpArrPtr;
+  InpRdbPos:=Access.InpRdbPos; InpArrLen:=Access.InpArrLen;
+  CurrPos:=Access.CurrPos; OldErrPos:=Access.OldErrPos end end;
+procedure LoadCompInp(ci:CompInpDPtr);
+begin
+  InpArrPtr:=ci^.InpArrPtr; InpRdbPos:=ci^.InpRdbPos;
+  InpArrLen:=ci^.InpArrLen; CurrPos:=ci^.CurrPos; OldErrPos:=ci^.OldErrPos;
+  PrevCompInp:=ci^.ChainBack;
+end;
+{$endif}
 
 end.

@@ -1,0 +1,10 @@
+{ the unpaid invoices and their customers, read from the data files;
+  ShowLine, a procedure, writes each of them }
+#DATABASE
+@invoice(No/Real,Cust/String,Total/Real,Paid/Boolean)
+@customer(Code/String,Name/String)
+#PREDICATES
+@showline(Real,String,String,Real)
+#CLAUSES
+main:- invoice(N,C,T,false), customer(C,Name), showline(N,C,Name,T), fail.
+main.

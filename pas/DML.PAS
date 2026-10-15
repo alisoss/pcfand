@@ -12,10 +12,12 @@ implementation
 
 uses obaseww,oaccess,runfrml,compile,wwmenu,runedi;
 
+{$ifdef FPC}procedure NoOvr; begin end;{$else}
 procedure NoOvr; far; assembler;
 asm   pop ax; pop ax; pop ax{bp}; push ax; push ax; call StackOvr;
       pop bp; pop ds; pop ax; pop dx; pop sp; push dx; push ax;
 end;
+{$endif}
 
 
 procedure _opentest;
@@ -273,7 +275,7 @@ begin with q^ do begin
   s:='/'+Header^+'/'+MenuTxt^; if s[length(s)]='/' then dec(s[0]);
   New(w,Init(0,0,StringPtr(@s)));
   _DMLMenu:=w^.Exec(1);
-  w^.Done; ReleaseStore(w);
+  {$ifdef FPC}Dispose(w,Done){$else}w^.Done; ReleaseStore(w){$endif};
 end end;
 procedure _F10Message(qq:pointer); far;
 type qr=record Text:StringPtr end; var q:^qr absolute qq;
@@ -341,7 +343,9 @@ type qr=record Pos:WordPtr;WasError:^boolean;FTyp:CharPtr;ZP:^FrmlPtr;FD:FileDPt
 label 1,2;
 begin with q^ do begin
   ResetCompilePars; CFile:=FD; if FD=nil then RdFldNameFrml:=RdFldNameFrmlDML;
-  NewExit(NoOvr,er); goto 1;
+  {$ifdef FPC}Move(ExitBuf,er,sizeof(ExitRecord)); ExitBuf.OvrEx:=NoOvr; ExitBuf.ExP:=ExitP; ExitBuf.BrkP:=BreakP;
+    ExitBuf.mBP:=MyBP; if SetJmp(ExitBuf.JmpBuf)<>0 then begin GoExitFired:=true; goto 1 end else GoExitFired:=false;
+    KeepInMemory([@q]);{$else}NewExit(NoOvr,er); goto 1;{$endif}
   SetInpStr(S^); RdLex; ZP^:=RdFrml(FTyp^); if Lexem<>^z then Error(40);
   WasError^:=false; Result^:=''; goto 2;
 1:WasError^:=true; IsCompileErr:=false; Result^:=MsgLine;
@@ -369,13 +373,16 @@ begin with q^ do begin
 end end;
 
 
+{$ifdef FPC}procedure NoOvrDML; begin end;{$else}
 procedure NoOvrDML; far; assembler;
 asm   pop ax; pop ax; push Fand_bp; call StackOvr;
       pop bp; pop bx;{ds} pop ax;{ip} pop dx;{cs} pop sp; mov ss,DML_ss;
       mov ds,bx; push dx; push ax;
 end;
+{$endif}
 
 procedure _DMLinit(qq:pointer); far;
+{$ifdef FPC}begin end;{$else}
 type qr=record Prnt{=nil,not used,needed for compatibility with earlier versions},
                Colr:PtrPointer; PrfxSeg,Ver:word;
                HpEnd,HpOrg:pointer; Attr,WMax,WMin:WordPtr end;
@@ -401,6 +408,7 @@ begin with q^ do begin
   WMin^:= word(WindMin); WMax^:=word(WindMax); Attr^:=ProcAttr;
   Colr^:=@base.Colors;
 end end;
+{$endif}
 
 procedure _DMLexit(qq:pointer); far;
 begin
@@ -431,6 +439,7 @@ var StackSave:array[1..128] of byte;
     NrFun:word;
     DmlInt3f:pointer;
 
+{$ifdef FPC}procedure CallDML; begin end;{$else}
 procedure CallDML; far; assembler;
 { DML stack: ds, ret/4, old_bp, ret/4, parameter }
 asm  push ds; mov ax,SEG @DATA; mov ds,ax; mov NrFun,bx;
@@ -452,6 +461,7 @@ asm  push ds; mov ax,SEG @DATA; mov ds,ax; mov NrFun,bx;
 @2:  push dx; push ax; lds dx,DmlInt3f; mov ax,253fH; int 21H; pop ax; pop dx;
      pop ds;
 end;
+{$endif}
 
 
 procedure InitDML;

@@ -1,5 +1,173 @@
 
 { XString }
+{$ifdef FPC}
+procedure XString.Clear;
+begin S[0]:=#0; end;
+procedure XString.StoreD(var R; Descend:boolean);
+{ R is a real (a Double here); the key is the BP7 one, made from its Real48 }
+var b:array[0..5] of byte; i:integer;
+begin
+  i:=ord(S[0]); if i+6>255 then exit;
+  FloatToReal48(float(R),@b);
+  S[i+1]:=chr((ord(b[5] and $80=0) shl 7) or (b[0] shr 1));
+  S[i+2]:=chr(((b[0] and 1) shl 7) or (b[5] and $7F));
+  S[i+3]:=chr(b[4]); S[i+4]:=chr(b[3]); S[i+5]:=chr(b[2]); S[i+6]:=chr(b[1]);
+  inc(S[0],6);
+  if Descend then
+    for i:=ord(S[0])-5 to ord(S[0]) do S[i]:=chr(not ord(S[i]));
+end;
+procedure XString.StoreN(var N; Len:word; Descend:boolean);
+var i,base:integer;
+begin
+  base:=ord(S[0]);
+  if base+Len>255 then exit;
+  Move(N,S[base+1],Len);
+  inc(S[0],Len);
+  if Descend then
+    for i:=base+1 to base+integer(Len) do S[i]:=chr(not ord(S[i]));
+end;
+procedure XString.StoreF(var F; Len:word; Descend:boolean);
+var i,base:integer; buf:array[0..17] of byte;
+begin
+  base:=ord(S[0]);
+  if base+Len>255 then exit;
+  Move(F,buf,Len);
+  if (buf[0] and $80)<>0 then buf[0]:=buf[0] and $7F
+  else buf[0]:=buf[0] or $80;
+  Move(buf,S[base+1],Len);
+  inc(S[0],Len);
+  if Descend then
+    for i:=base+1 to base+integer(Len) do S[i]:=chr(not ord(S[i]));
+end;
+procedure XString.StoreA(var A; Len:word; CompLex,Descend:boolean);
+var i,base,slen:integer; V:string;
+begin
+  base:=ord(S[0]);
+  if not CompLex then begin
+    V[0]:=chr(Len); Move(A,V[1],Len);
+  end else V:=LexOrd(@A,Len);
+  slen:=ord(V[0]);
+  while (slen>0) and (V[slen]=' ') do dec(slen);
+  if slen<ord(V[0]) then begin inc(slen); V[slen]:=chr($1F) end;
+  if base+slen>255 then exit;
+  Move(V[1],S[base+1],slen);
+  inc(S[0],slen);
+  if Descend then
+    for i:=base+1 to base+slen do S[i]:=chr(not ord(S[i]));
+end;
+{$ifdef FandSQL}
+procedure XString.GetF(Off,Len:word; Descend:boolean; var Buf);
+var i:integer; b:array[0..17] of byte;
+begin
+  Move(S[Off+1],b,Len);
+  if Descend then for i:=0 to Len-1 do b[i]:=not b[i];
+  if (b[0] and $80)<>0 then b[0]:=b[0] and $7F
+  else b[0]:=b[0] or $80;
+  Move(b,Buf,Len);
+end;
+procedure XString.GetD(Off:word; Descend:boolean; var R);
+var buf:array[0..5] of byte; i:integer;
+begin
+  Move(S[Off+1],buf,6);
+  if Descend then for i:=0 to 5 do buf[i]:=not buf[i];
+  PByteArray(@R)^[5]:=buf[0]; PByteArray(@R)^[4]:=buf[1];
+  PByteArray(@R)^[3]:=buf[2]; PByteArray(@R)^[2]:=buf[3];
+  PByteArray(@R)^[1]:=buf[4]; PByteArray(@R)^[0]:=buf[5];
+  if (PByteArray(@R)^[5] and $80)<>0 then
+    PByteArray(@R)^[5]:=PByteArray(@R)^[5] and $7F
+  else begin
+    for i:=0 to 5 do PByteArray(@R)^[i]:=not PByteArray(@R)^[i];
+  end;
+end;
+procedure XString.GetN(Off,Len:word; Descend:boolean; var Buf);
+var i:integer;
+begin
+  Move(S[Off+1],Buf,Len);
+  if Descend then for i:=0 to Len-1 do PByteArray(@Buf)^[i]:=not PByteArray(@Buf)^[i];
+end;
+function XString.GetA(Off,Len:word; CompLex,Descend:boolean; var Buf):word;
+var i,j:integer; c:byte;
+begin
+  j:=0;
+  for i:=0 to Len-1 do begin
+    c:=ord(S[Off+1+i]);
+    if Descend then c:=not c;
+    if c=$1F then begin
+      while j<Len do begin PByteArray(@Buf)^[j]:=ord(' '); inc(j) end;
+      break;
+    end;
+    PByteArray(@Buf)^[j]:=c;
+    inc(j);
+  end;
+  GetA:=Len;
+end;
+{$endif}
+{ XItem }
+function XItem.GetN:longint;
+begin GetN:=longint(Nr[1]) or (longint(Nr[2]) shl 8) or (longint(Nr[3]) shl 16); end;
+procedure XItem.PutN(N:longint);
+begin Nr[1]:=byte(N); Nr[2]:=byte(N shr 8); Nr[3]:=byte(N shr 16); end;
+function XItem.GetM(O:word):word;
+begin GetM:=PByteArray(@Self)^[O]; end;
+procedure XItem.PutM(O:word;M:word);
+begin PByteArray(@Self)^[O]:=byte(M); end;
+function XItem.GetL(O:word):word;
+begin GetL:=PByteArray(@Self)^[O+1]; end;
+procedure XItem.PutL(O:word;L:word);
+begin PByteArray(@Self)^[O+1]:=byte(L); end;
+function XItem.Next(O:word):XItemPtr;
+begin Next:=XItemPtr(PtrUInt(@Self)+O+PByteArray(@Self)^[O+1]+2); end;
+function XItem.UpdStr(O:word;S:StringPtr):XPageOfs;
+var m,l:byte;
+begin
+  m:=PByteArray(@Self)^[O];
+  l:=PByteArray(@Self)^[O+1];
+  S^[0]:=chr(m+l);
+  Move(S^[m+1],S^[m+1],0);
+  Move(PByteArray(@Self)^[O+2],S^[m+1],l);
+  UpdStr:=PtrUInt(@Self)+O+2+l;
+end;
+procedure XString.StoreReal(R:real; KF:KeyFldDPtr);
+var A:array[1..20] of byte; n:word; b:boolean;
+const TabF:array[1..18]of byte=(1,1,2,2,3,3,4,4,4,5,5,6,6,6,7,7,8,8);
+begin with KF^.FldD^ do begin
+  if Typ in ['R','D'] then begin
+    b:=KF^.Descend; if R<0 then begin b:=not b; R:=-R end;
+    Self.StoreD(R,b); exit end;
+  if Flg and f_Comma=0 then R:=R*Power10[M]; n:=L-1; if M>0 then dec(n); n:=TabF[n];
+  FixFromReal(R,A,n); StoreF(A,n,KF^.Descend);
+end end;
+procedure XString.StoreStr(V:string; KF:KeyFldDPtr);
+var n:word;
+begin with KF^.FldD^ do begin
+  while ord(V[0])<L do if M=LeftJust then V:=V+' ' else V:=' '+V;
+  if Typ='N' then begin
+    Pack(V[1],V,L); n:=(L+1)div 2; StoreN(V,n,KF^.Descend) end
+  else StoreA(V[1],L,KF^.CompLex,KF^.Descend);
+end end;
+procedure XString.StoreBool(B:boolean; KF:KeyFldDPtr);
+begin StoreN(B,1,KF^.Descend); end;
+procedure XString.StoreKF(KF:KeyFldDPtr);
+var F:FieldDPtr;
+begin
+  F:=KF^.FldD; case F^.FrmlTyp of
+   'S':StoreStr(_shorts(F),KF);
+   'R':StoreReal(_r(F),KF);
+   'B':StoreBool(_b(F),KF) end;
+end;
+procedure XString.PackKF(KF:KeyFldDPtr);
+begin Clear; while KF<>nil do begin StoreKF(KF); KF:=KF^.Chain end; end;
+function XString.PackFrml(FL:FrmlList; KF:KeyFldDPtr):boolean;
+var Z:FrmlPtr;
+begin
+  Clear; while FL<>nil do begin Z:=FL^.Frml; case KF^.FldD^.FrmlTyp of
+   'S':StoreStr(RunShortStr(Z),KF);
+   'R':StoreReal(RunReal(Z),KF);
+   'B':StoreBool(RunBool(Z),KF) end;
+   KF:=KF^.Chain; FL:=FL^.Chain end;
+  PackFrml:=KF<>nil;
+end;
+{$else}
 
 procedure XString.Clear; assembler;
 asm les di,Self; mov es:[di].byte,0 end;
@@ -149,13 +317,14 @@ function XItem.Next(O:word):XItemPtr; assembler;
 asm les bx,Self; add bx,O; xor ah,ah; mov al,es:[bx+1]; add ax,bx; add ax,2;
     mov dx,es end;
 
-function XItem.UpdStr(O:word;S:StringPtr):word; assembler;
+function XItem.UpdStr(O:word;S:StringPtr):XPageOfs; assembler;
 asm  push ds; lds bx,Self; les di,S; cld; add bx,O;
      mov al,[bx];{M} add al,[bx+1];{L} stosb;
      mov al,[bx]; xor ah,ah; add di,ax; lea si,[bx+2];
      xor ch,ch; mov cl,[bx+1]; rep movsb; mov ax,si; pop ds;
 end;
 
+{$endif}
 
 {  XPage }
 
@@ -168,8 +337,8 @@ begin
   x:=XItemPtr(@A); o:=Off; while I>1 do begin x:=x^.Next(o); dec(I) end;  XI:=x;
 end;
 
-function XPage.EndOff:word;
-var x:XItemPtr; xofs:word absolute x;
+function XPage.EndOff:XPageOfs;
+var x:XItemPtr; xofs:XPageOfs absolute x;
 begin x:=XI(NItems+1); EndOff:=xofs end;
 
 function XPage.Underflow:boolean;
@@ -179,12 +348,15 @@ function XPage.Overflow:boolean;
 begin Overflow:=EndOff-ofs(Self)>XPageSize end;
 
 function XPage.StrI(I:word):string;
-var x:XItemPtr; xofs:word absolute x; o,j:word; s:StringPtr;
+var x:XItemPtr; xofs:XPageOfs absolute x; o,j:word; s:StringPtr;
+    {$ifdef FPC}tmpStr:string;{$endif}
 begin
   x:=XItemPtr(@A); o:=Off;
-  asm les di,@result; mov s.word,di; mov s[2].word,es end;
+  {$ifdef FPC}s:=@tmpStr;{$else}
+  asm les di,@result; mov s.word,di; mov s[2].word,es end;{$endif}
   if I>NItems then s^[0]:=#0 else
   for j:=1 to I do xofs:=x^.UpdStr(o,s);
+  {$ifdef FPC}StrI:=tmpStr;{$endif}
 end;
 
 function XPage.SumN:longint;
@@ -196,8 +368,8 @@ begin
 
 procedure XPage.Insert(I:word;var SS; var XX:XItemPtr);
 var S:string absolute SS;
-var x,x2:XItemPtr; xofs:word absolute x; x2ofs:word absolute x2;
-    m,m2,o,oE,l,l2,sz:word;  d:integer;
+var x,x2:XItemPtr; xofs:XPageOfs absolute x; x2ofs:XPageOfs absolute x2;
+    m,m2,o,l,l2,sz:word; oE:XPageOfs; d:integer;
 begin
   o:=Off; oE:=EndOff; inc(NItems); x:=XI(I);
   m:=0; if I>1 then m:=SLeadEqu(StrI(I-1),S); l:=length(S)-m; sz:=o+2+l;
@@ -205,7 +377,7 @@ begin
     x2:=x; m2:=SLeadEqu(StrI(I),S); d:=m2-x^.GetM(o);
     if d>0 then begin l2:=x^.GetL(o); inc(x2ofs,d); Move(x^,x2^,o);
       x2^.PutM(o,m2); x2^.PutL(o,l2-d); dec(sz,d) end;
-    Move(x2^,ptr(seg(x2^),x2ofs+sz)^,oE-x2ofs) end;
+    Move(x2^,{$ifdef FPC}pointer(x2ofs+sz){$else}ptr(seg(x2^),x2ofs+sz){$endif}^,oE-x2ofs) end;
   XX:=x; x^.PutM(o,m); x^.PutL(o,l); inc(xofs,o+2); Move(S[m+1],x^,l);
 end;
 
@@ -218,8 +390,8 @@ end;
 
 procedure XPage.Delete(I:word);
 var x,x1,x2:XItemPtr;
-    xofs:word absolute x; x1ofs:word absolute x1; x2ofs:word absolute x2;
-    o,oE:word; d:integer;
+    xofs:XPageOfs absolute x; x1ofs:XPageOfs absolute x1; x2ofs:XPageOfs absolute x2;
+    o:word; oE:XPageOfs; d:integer;
 begin
   o:=Off; oE:=EndOff; x:=XI(I);
   if I<NItems then begin x2:=x^.Next(o); d:=x2^.GetM(o)-x^.GetM(o);
@@ -231,7 +403,7 @@ begin
 end;
 
 procedure XPage.AddPage(P:XPagePtr);
-var x,x1,xE:XItemPtr; xofs:word absolute x; o,oE,m,l:word;
+var x,x1,xE:XItemPtr; xofs:XPageOfs absolute x; o,m,l:word; oE:XPageOfs;
 begin
   GreaterPage:=P^.GreaterPage; if P^.NItems=0 then exit;
   xE:=XI(NItems+1); oE:=P^.EndOff; o:=Off; x:=XItemPtr(@P^.A);
@@ -245,13 +417,13 @@ end;
 
 procedure XPage.SplitPage(P:XPagePtr;ThisPage:longint);
 var x,x1,x2:XItemPtr;
-    xofs:word absolute x; x1ofs:word absolute x1; x2ofs:word absolute x2;
-    o,oA,oE,n:word; s:^string;
+    xofs:XPageOfs absolute x; x1ofs:XPageOfs absolute x1; x2ofs:XPageOfs absolute x2;
+    o,n:word; oA,oE:XPageOfs; s:^string;
 begin
   x:=XItemPtr(@A); x1:=x; o:=Off; oA:=xofs; oE:=EndOff; n:=0;
   while xofs-oA < oE-xofs+x^.GetM(o) do begin x:=x^.Next(o); inc(n) end;
   FillChar(P^,XPageSize,0); Move(x1^,P^.A,xofs-oA);
-  s:=ptr(seg(x1^),oA+o+1); s^:=StrI(n+1); Move(x^,x1^,o); x1^.PutM(o,0);
+  s:={$ifdef FPC}pointer(oA+o+1){$else}ptr(seg(x1^),oA+o+1){$endif}; s^:=StrI(n+1); Move(x^,x1^,o); x1^.PutM(o,0);
   x1:=x1^.Next(o); x:=x^.Next(o); Move(x^,x1^,oE-xofs);
   P^.NItems:=n; dec(NItems,n); xofs:=EndOff; FillChar(x^,oE-xofs,0);
   if IsLeaf then P^.GreaterPage:=ThisPage else P^.GreaterPage:=0;
@@ -345,6 +517,7 @@ end;
 function XKey.Search(var XX:XString;AfterEqu:boolean;var RecNr:longint):boolean;
 var page:longint; p:XPagePtr; x:XItemPtr; o:word; iItem,nItems:word;
     result:char;
+    {$ifdef FPC}m_val,l_val,xxlen:byte; dx,cx,k:word; rest,res:integer; c1,c2:byte;{$endif}
 label 1,2;
 begin
   p:=GetStore(XPageSize);
@@ -352,6 +525,32 @@ begin
 1:XPath[XPathN].Page:=page;  XF^.RdPage(p,page);
   x:=XItemPtr(@p^.A); o:=p^.Off; nItems:=p^.NItems;
   if nItems=0 then begin RecNr:=CFile^.NRecs+1; XPath[1].I:=1; goto 2 end;
+  {$ifdef FPC}
+  begin
+    iItem:=1; dx:=1; result:=_gt; xxlen:=ord(XX.S[0]);
+    while true do begin
+      m_val:=PByteArray(x)^[o]; l_val:=PByteArray(x)^[o+1];
+      if dx>m_val then begin
+        rest:=integer(xxlen)-integer(m_val); if rest<0 then rest:=0;
+        if l_val<rest then cx:=l_val else cx:=rest;
+        k:=0; res:=0;
+        while k<cx do begin
+          c1:=ord(XX.S[m_val+k+1]); c2:=PByteArray(x)^[o+2+k];
+          if c1<>c2 then begin if c1<c2 then res:=-1 else res:=1; break end;
+          inc(k);
+        end;
+        if res<0 then begin result:=_lt; break end;
+        if res>0 then dx:=m_val+k+1
+        else if rest<l_val then begin result:=_lt; break end
+        else if rest>l_val then dx:=m_val+cx+1
+        else if not AfterEqu then begin result:=_equ; break end
+        else dx:=m_val+cx+1;
+      end;
+      if iItem=nItems then begin result:=_gt; inc(iItem); break end;
+      inc(iItem); x:=x^.Next(o);
+    end;
+  end;
+  {$else}
   asm
      push ds; cld; les bx,x; mov iItem,1; mov dx,1;
 @@1: add bx,o; xor ax,ax; mov al,es:[bx]; cmp dx,ax; jna @@5; {first different <= prefix length?}
@@ -372,6 +571,7 @@ begin
 @@8: mov al,_lt;
 @@9: mov result,al; sub bx,o; mov x.word,bx; pop ds;
   end;
+  {$endif}
   XPath[XPathN].I:=iItem;
   if p^.IsLeaf then begin
     if iItem>nItems then RecNr:=CFile^.NRecs+1 else RecNr:=x^.GetN;

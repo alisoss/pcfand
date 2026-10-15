@@ -1,0 +1,8 @@
+{ the items of an invoice; No is the invoice's number }
+No:F,6.0; Prod:A,6; Qty:F,7.2; Price:F,9.2;
+#K @ * No; INVOICE No; PRODUCT Prod;
+#C Amount:=Qty*Price : F,10.2;
+#A INVOICE.Total += Amount;
+#D (Price=0) Price:=PRODUCT.Price;
+#L Qty>0 : 'the quantity must be positive';
+   PRODUCT.exist : 'no such product';

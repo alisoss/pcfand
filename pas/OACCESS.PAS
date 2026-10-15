@@ -71,7 +71,12 @@ var b:boolean; i:word; cf:FileDPtr;
 begin
   if not CacheExist then exit; cf:=CFile; CFile:=CatFD; WrPrefixes;
   ForAllFDs(SaveFD); b:=SaveCache(0); FlushHandles;
-  CFile:=cf; if not b then GoExit;
+  CFile:=cf;
+  {$ifdef FPC}
+  if not b then exit;
+  {$else}
+  if not b then GoExit;
+  {$endif}
 end;
 procedure ClosePassiveFD;
 begin with CFile^ do
@@ -156,6 +161,22 @@ begin
 4:        n:=HandleError; CloseClearHCFile; HandleError:=n; TestCPathError end;
       if FileSizeH(Handle)<512 then SetNotValid end;
 end end;
+function ReopenForUpdate:boolean;
+var old:FileUseMode; e:word;
+begin with CFile^ do begin
+  ReopenForUpdate:=true;
+  if not (UMode in [RdOnly,RdShared]) then exit;
+  old:=UMode;
+  CloseClearH(Handle);
+  UMode:=Shared;
+  Handle:=OpenH(_isoldfile,UMode);
+  if HandleError<>0 then begin
+    e:=HandleError;
+    UMode:=old; Handle:=OpenH(_isoldfile,UMode);
+    HandleError:=e;
+    ReopenForUpdate:=false;
+  end;
+end end;
 function OpenF2:boolean;
 var FS,n,l:longint; Signum,rLen:word; md:LockMode;
 label 1,2,3;
@@ -174,7 +195,8 @@ begin with CFile^ do begin
   if n<NRecs then begin SetCPathVol; SetMsgPar(CPath);
     if PromptYN(882) then begin NRecs:=n;
 1:    if IsShared and (LMode<ExclMode) then ChangeLMode(ExclMode,0,false); LMode:=ExclMode;
-2:    SetUpdHandle(Handle); WrPrefix end
+2:    {$ifdef FPC}if not ReopenForUpdate then begin TestCFileError; CloseGoExit end;{$endif}
+      SetUpdHandle(Handle); WrPrefix end
     else CloseGoExit end;
 3:if TF<>nil then
     if FS<FrstDispl then TF^.SetEmpty else begin
@@ -365,7 +387,7 @@ function GetCatIRec(Name:NameStr;MultiLevel:boolean):word;
   var i:longint; CF:FileDPtr; R:RdbDPtr; CR:pointer;
   label 1,2;
   begin GetCatIRec:=0;
-       if CatFD^.Handle=$FF then exit; if CRdb=nil then exit;
+       if {$ifdef FPC}(CatFD=nil) or{$endif} (CatFD^.Handle=$FF) then exit; if CRdb=nil then exit;
         CF:=CFile;CR:=CRecPtr; CFile:=CatFD; CRecPtr:=GetRecSpace;
         R:=CRdb;
       1:for i:=1 to CatFD^.NRecs do
@@ -401,11 +423,13 @@ function RdCatField(CatIRec:word;CatF:FieldDPtr):string;
   var CF:FileDPtr; CR:pointer;
   begin CF:=CFile;CR:=CRecPtr; CFile:=CatFD; CRecPtr:=GetRecSpace;
       ReadRec(CatIRec); RdCatField:=trailchar(' ',_shorts(CatF));
+      {$ifdef FPC}if CatF=CatPathName then RdCatField:=UnixPath(trailchar(' ',_shorts(CatF)));{$endif}
       ReleaseStore(CRecPtr); CFile:=CF;CRecPtr:=CR end;
 procedure WrCatField(CatIRec:word;CatF:FieldDPtr;Txt:string);
   var CF:FileDPtr; CR:pointer;
   begin CF:=CFile;CR:=CRecPtr; CFile:=CatFD; CRecPtr:=GetRecSpace;
-      ReadRec(CatIRec); s_(CatF,Txt); WriteRec(CatIRec);
+      ReadRec(CatIRec); {$ifdef FPC}if CatF=CatPathName then Txt:=UnixPath(Txt);{$endif}
+      s_(CatF,Txt); WriteRec(CatIRec);
       ReleaseStore(CRecPtr); CFile:=CF;CRecPtr:=CR end;
 procedure RdCatPathVol(CatIRec:word);
   begin CPath:=FExpand(RdCatField(CatIRec,CatPathName));
@@ -433,8 +457,13 @@ begin
   if (CPath[2]<>':') and SetContextDir(d,isRdb) then begin
     if isRdb then begin FSplit(CPath,CDir,CName,CExt);
       AddBackSlash(d); CDir:=d; CPath:=CDir+CName+CExt; exit end;
+    {$ifdef FPC}
+    if CPath[1]=DirectorySeparator then  else begin
+      AddBackSlash(d); CPath:=d+CPath end end
+    {$else}
     if CPath[1]='\' then CPath:=copy(d,1,2)+CPath else begin
       AddBackSlash(d); CPath:=d+CPath end end
+    {$endif}
   else CPath:=FExpand(CPath);
   FSplit(CPath,CDir,CName,CExt);
 end;
@@ -463,7 +492,7 @@ end;
 procedure SetTxtPathVol(Path:StringPtr;CatIRec:word);
 begin
   if CatIRec<>0 then RdCatPathVol(CatIRec)
-  else begin CPath:=FExpand(Path^); CVol:='' end;
+  else begin CPath:=FExpand({$ifdef FPC}UnixPath(Path^){$else}Path^{$endif}); CVol:='' end;
 end;
 
 {===========================================================================}

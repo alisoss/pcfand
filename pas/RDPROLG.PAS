@@ -74,7 +74,9 @@ type
                 Pred:word{PPredicate};
                 InpMask,OutpMask,{only _CioMaskOpt}
                 Elem{_MemP..:ListDom else PPTerm},Idx,Idx2:word; {_AllC}
-                CompMask,KDOfs:word; ArgI:array[0..0] of byte{only FAND-file});
+                CompMask:word;
+                KDOfs:{$ifdef FPC}KeyDPtr{$else}word{$endif};
+                ArgI:array[0..0] of byte{only FAND-file});
       _WriteC: (WrD:word{PWriteD}; NL:boolean);
       _ErrorC: (WrD1:word; MsgNr:word);
       _Trace : (TrcLevel:integer);
@@ -127,6 +129,15 @@ function ReadProlog(RecNr:word):word;
 
 var
   _Sg:word;
+function SgPtr(Ofs:word):pointer;
+procedure SgFix(var P);
+function SgOfs(P:pointer):word;
+function SegOf(P:pointer):word;
+function SgRegister(Base:pointer):word;
+function SgMark:word;
+procedure SgRelease(N:word);
+function InSg(P:pointer):boolean;
+function AdrOfs(P:pointer):SgOfsInt;
 implementation
 
 uses runprolg, runproj;
@@ -143,18 +154,65 @@ var
   UnderscoreTerm:word{PPTerm};
   UnbdVarsInTerm,WasUnbd,WasOp:boolean;
   Roots:PProgRoots;
-  PackedTermPtr:Pchar; PTPMaxOfs:word;
+  PackedTermPtr:Pchar; PTPMaxOfs:SgOfsInt;
   ClausePreds:word;
 
 
-procedure ChainLst(var Root;NewOfs:word); assembler;
-asm  les di,Root;
-@1:  cmp es:[di].word,0; je @2; mov di,es:[di]; mov es,_Sg; jmp @1;
-@2:  mov ax,NewOfs; mov es:[di],ax;
+{$ifdef FPC}
+const MaxSgNr = 32;
+var   SgTab:array[0..MaxSgNr] of pointer; SgNr:word;
+      SgLen:array[0..MaxSgNr] of longint;   { ReadProlog sets it when done }
+function SgPtr(Ofs:word):pointer;
+begin SgPtr:=pointer(PtrUInt(SgTab[_Sg])+Ofs) end;
+procedure SgFix(var P);
+begin PPointer(@P)^:=SgPtr(word(PtrUInt(PPointer(@P)^))) end;
+function SgOfs(P:pointer):word;
+var n:PtrUInt;
+begin n:=PtrUInt(P)-PtrUInt(SgTab[_Sg]); if n>$FFFF then OldError(544); SgOfs:=word(n) end;
+function SgRegister(Base:pointer):word;
+begin inc(SgNr); if SgNr>MaxSgNr then OldError(544); SgTab[SgNr]:=Base; SgLen[SgNr]:=$10000;
+  SgRegister:=SgNr end;
+function SgMark:word;
+begin SgMark:=SgNr end;
+procedure SgRelease(N:word);
+begin SgNr:=N end;
+{ in the compiled program - not a string the heap put after it }
+function InSg(P:pointer):boolean;
+begin InSg:=(PtrUInt(P)>=PtrUInt(SgTab[_Sg])) and (PtrUInt(P)<PtrUInt(SgTab[_Sg])+SgLen[_Sg]) end;
+function AdrOfs(P:pointer):SgOfsInt;
+begin AdrOfs:=PtrUInt(P) end;
+function SegOf(P:pointer):word;
+begin SegOf:=0 end;
+{$else}
+function SgPtr(Ofs:word):pointer;
+begin SgPtr:=ptr(_Sg,Ofs) end;
+procedure SgFix(var P);
+begin PtrRec(pointer(P)).Seg:=_Sg end;
+function SgOfs(P:pointer):word;
+begin SgOfs:=((PtrRec(P).Seg-_Sg)shl 4) + PtrRec(P).Ofs end;
+function SgRegister(Base:pointer):word;
+begin SgRegister:=PtrRec(Base).Seg end;
+function SgMark:word;
+begin SgMark:=0 end;
+procedure SgRelease(N:word);
+begin end;
+function InSg(P:pointer):boolean;
+begin InSg:=(PtrRec(P).Seg=_Sg) end;
+function AdrOfs(P:pointer):SgOfsInt;
+begin AdrOfs:=PtrRec(P).Ofs end;
+function SegOf(P:pointer):word;
+begin SegOf:=PtrRec(P).Seg end;
+{$endif}
+procedure ChainLst(var Root;NewOfs:word);
+var w:WordPtr;
+begin
+  w:=WordPtr(@Root);
+  while w^<>0 do w:=WordPtr(SgPtr(w^));
+  w^:=NewOfs;
 end;
 function OOfs(p:pointer):word;
 begin
-  OOfs:=((PtrRec(p).Seg-_Sg)shl 4) + PtrRec(p).Ofs;
+  OOfs:=SgOfs(p);
 end;
 function GetZStor(Sz:word):word;
 var p:pointer;
@@ -162,14 +220,16 @@ begin
   p:=GetZStore(Sz); GetZStor:=OOfs(p);
 end;
 function OPtr(Sg:word;p:pointer):pointer;
+{$ifdef FPC}
+begin OPtr:=p end;
+{$else}
 begin
   OPtr:=ptr(Sg,((PtrRec(p).Seg-Sg)shl 4) + PtrRec(p).Ofs);
 end;
-function StorStr(S:string):word; assembler;
-asm  les di,S; xor ch,ch; mov cl,es:[di]; inc cx; push cx;
-     push cx; call GetZStor;
-     mov es,_Sg; mov di,ax; pop cx; push ds; lds si,S; cld; rep movsb;
-     pop ds end;
+{$endif}
+function StorStr(S:string):word;
+var o:word;
+begin o:=GetZStor(length(S)+1); Move(S,SgPtr(o)^,length(S)+1); StorStr:=o end;
 
 {  L E X A N A L  =========================================================}
 
@@ -242,16 +302,16 @@ end;
 function GetFunDclByName(D:word;var I:byte):PFunDcl;
 var fd:word;
 begin
-  I:=0; fd:=PDomain(ptr(_Sg,d))^.FunDcl;
+  I:=0; fd:=PDomain(SgPtr(d))^.FunDcl;
   while (fd<>0) and
-    (StringPtr(ptr(_Sg,PFunDcl(ptr(_Sg,fd))^.Name))^<>LexWord) do begin
-    fd:=PFunDcl(ptr(_Sg,fd))^.Chain; inc(I) end;
-  if fd=0 then GetFunDclByName:=nil else GetFunDclByName:=ptr(_Sg,fd);
+    (StringPtr(SgPtr(PFunDcl(SgPtr(fd))^.Name))^<>LexWord) do begin
+    fd:=PFunDcl(SgPtr(fd))^.Chain; inc(I) end;
+  if fd=0 then GetFunDclByName:=nil else GetFunDclByName:=SgPtr(fd);
 end;
 function GetOrigDomain(D:word):word;
 begin
-  if D<>0 then while PDomain(ptr(_Sg,D))^.Typ=_RedefD do
-    D:=PDomain(ptr(_Sg,D))^.OrigDom; GetOrigDomain:=D;
+  if D<>0 then while PDomain(SgPtr(D))^.Typ=_RedefD do
+    D:=PDomain(SgPtr(D))^.OrigDom; GetOrigDomain:=D;
 end;
 
 {  T D A T A B A S E  =====================================================}
@@ -260,7 +320,7 @@ function FindDataBase(const S:string):word{PDatabase};
 var db:PDatabase; dbofs:word absolute db;
 label 1;
 begin
-  db:=ptr(_Sg,Roots^.Databases); while dbofs<>0 do begin
+  db:=SgPtr(Roots^.Databases); while dbofs<>0 do begin
     if db^.Name=S then goto 1; dbofs:=db^.Chain end;
 1:FindDataBase:=dbofs;
 end;
@@ -270,7 +330,7 @@ end;
 function FindConst(D:word):word{PPTerm};
 var p:PConst; pofs:word absolute p;
 begin
-  p:=ptr(_Sg,Roots^.Consts); FindConst:=0; while pofs<>0 do begin
+  p:=SgPtr(Roots^.Consts); FindConst:=0; while pofs<>0 do begin
     if (p^.Dom=D) and (p^.Name=LexWord) then begin FindConst:=p^.Expr; exit end;
     pofs:=p^.Chain end;
 end;
@@ -315,7 +375,7 @@ begin
     not ((v^.Dom=LongStrDom) and (DOfs=StrDom)) and
     not ((v^.Dom=IntDom) and (DOfs=RealDom)) and
     not ((v^.Dom=RealDom) and (Dofs=IntDom)) then begin RdLex;
-1:    Set2MsgPar(PDomain(ptr(_Sg,v^.Dom))^.Name,PDomain(ptr(_Sg,DOfs))^.Name);
+1:    Set2MsgPar(PDomain(SgPtr(v^.Dom))^.Name,PDomain(SgPtr(DOfs))^.Name);
       OldError(507) end;
   RdLex; bnd:=v^.Bound; RdVar:=true;
   case Kind of { 1: head-i,call-o  2: call-i  3: head-o  5: unbound-o }
@@ -326,7 +386,7 @@ begin
        else begin v^.Bound:=true; UnbdVarsInTerm:=true; WasUnbd:=true end;
     5: begin v^.Bound:=true; if bnd then OldError(523); RT:=v^.Idx; exit end end;
   if (Idx=-1) or (v^.Idx<>Idx) then begin
-    PtrRec(t).Seg:=_Sg; tofs:=GetZStor(5);
+    SgFix(t); tofs:=GetZStor(5);
     t^.Fun:=_VarT; t^.Idx:=v^.Idx; t^.Bound:=bnd;
     if (v^.Dom<>DOfs) then begin
       if not bnd then goto 1; tofs:=GetOp1(DOfs,_conv,tofs) end;
@@ -344,13 +404,13 @@ end;
 function GetOp1(DOfs:word;Op:char;E1:word):word{PPTerm};
 var t:PPTerm; tofs:word absolute t;
 begin
-  t:=ptr(_Sg,GetZStor(1+1+2)); t^.Fun:=DomFun(DOfs); t^.Op:=Op; WasOp:=true;
+  t:=SgPtr(GetZStor(1+1+2)); t^.Fun:=DomFun(DOfs); t^.Op:=Op; WasOp:=true;
   t^.E1:=E1; GetOp1:=tofs;
 end;
 function GetOp2(DOfs:word;Op:char;E1,E2:word):word{PPTerm};
 var t:PPTerm; tofs:word absolute t;
 begin
-  t:=ptr(_Sg,GetZStor(1+1+2*2)); t^.Fun:=DomFun(DOfs); t^.Op:=Op; WasOp:=true;
+  t:=SgPtr(GetZStor(1+1+2*2)); t^.Fun:=DomFun(DOfs); t^.Op:=Op; WasOp:=true;
   t^.E1:=E1; t^.E2:=E2; GetOp2:=tofs;
 end;
 function GetFunOp(DOfs,ResDOfs:word;Op:char;const ArgTyp:string;Kind:integer):word{PPTerm};
@@ -358,7 +418,7 @@ var t:PPTerm; tofs:word absolute t; i,l,t1ofs:word;
 begin
   if DOfs<>ResDOfs then OldError(510); l:=length(ArgTyp);
   if l>0 then Accept('(');
-  t:=ptr(_Sg,GetZStor(1+1+2*l)); t^.Fun:=DomFun(DOfs); t^.Op:=Op; WasOp:=true;
+  t:=SgPtr(GetZStor(1+1+2*l)); t^.Fun:=DomFun(DOfs); t^.Op:=Op; WasOp:=true;
   for i:=1 to l do begin
     if i>1 then Accept(','); case ArgTyp[i] of
       'l':t1Ofs:=RdAddExpr(LongStrDom,Kind);
@@ -375,7 +435,7 @@ var t:PPTerm; tofs:word absolute t; op:char;
     minus:boolean; r:float; s:string[20]; i:integer; n:longint;
 label 1,2;
 begin
-  PtrRec(t).Seg:=_Sg; case Lexem of
+  SgFix(t); case Lexem of
     '^': begin if DOfs<>IntDom then Error(510); op:=Lexem; RdLex;
          tofs:=GetOp1(DOfs,op,RdPrimExpr(DOfs,Kind)) end;
     '(': begin RdLex; tofs:=RdAddExpr(DOfs,Kind); Accept(')') end;
@@ -438,17 +498,17 @@ function RdListTerm(DOfs:word;Kind:integer):word{PPTerm};
 var t:PPTerm; tofs:word absolute t; t1,tPrev:word;
 label 1;
 begin
-  PtrRec(t).Seg:=_Sg;
+  SgFix(t);
   if not rdVar(DOfs,Kind,-1,tofs) and not rdConst(DOfs,tofs) then begin
     if Lexem<>'[' then Error(510); RdLex; tofs:=0;
     if Lexem=']' then RdLex else begin
-1:    t1:=GetZStor(1+1+2*2); with PPTerm(ptr(_Sg,t1))^ do begin
+1:    t1:=GetZStor(1+1+2*2); with PPTerm(SgPtr(t1))^ do begin
         Fun:=_ListT; Op:=_const;
-        Elem:=RdTerm(PDomain(ptr(_Sg,DOfs))^.ElemDom,Kind) end;
-      if tofs=0 then tofs:=t1 else PPTerm(ptr(_Sg,tPrev))^.Next:=t1;
+        Elem:=RdTerm(PDomain(SgPtr(DOfs))^.ElemDom,Kind) end;
+      if tofs=0 then tofs:=t1 else PPTerm(SgPtr(tPrev))^.Next:=t1;
       tPrev:=t1; if Lexem=',' then begin RdLex; goto 1 end;
       if Lexem='|' then begin RdLex;
-        if not rdVar(DOfs,Kind,-1,PPTerm(ptr(_Sg,tPrev))^.Next) then Error(511) end;
+        if not rdVar(DOfs,Kind,-1,PPTerm(SgPtr(tPrev))^.Next) then Error(511) end;
       Accept(']') end end;
   if Lexem='+' then begin
     t1:=tofs; tofs:=GetZStor(1+1+2*2); t^.Op:='+'; RdLex; t^.Fun:=_ListT;
@@ -460,12 +520,12 @@ var t:PPTerm; tofs:word absolute t; f:PFunDcl; i,n:word; idx:byte; wo,wu:boolean
 label 1;
 begin
   wo:=WasOp; wu:=WasUnbd; WasOp:=false; WasUnbd:=false;
-  case PDomain(ptr(_Sg,DOfs))^.Typ of
+  case PDomain(SgPtr(DOfs))^.Typ of
     _IntD,_RealD,_StrD,_LongStrD:    tofs:=RdAddExpr(DOfs,Kind);
     _ListD:                          tofs:=RdListTerm(DOfs,Kind);
   else if not rdVar(DOfs,Kind,-1,tofs) and not rdConst(DOfs,tofs) then begin
     TestIdentif; f:=GetFunDclByName(DOfs,idx); if f=nil then Error(512);
-    RdLex; n:=f^.Arity; t:=ptr(_Sg,GetZStor(1+1+2*n));
+    RdLex; n:=f^.Arity; t:=SgPtr(GetZStor(1+1+2*n));
     t^.Fun:=idx; t^.Arity:=n; if n>0 then begin
       Accept('('); for i:=0 to n-1 do begin
         if i>0 then Accept(','); t^.Arg[i]:=RdTerm(f^.Arg[i],Kind) end;
@@ -480,20 +540,20 @@ function MakeDomain(DTyp:TDomainTyp;const Nm:string):word;
 var dofs:word;
 begin
   dofs:=GetZStor(sizeof(TDomain)-1+length(Nm)); ChainLst(Roots^.Domains,dofs);
-  with PDomain(ptr(_Sg,dofs))^ do begin Typ:=DTyp; move(Nm,Name,length(Nm)+1) end;
+  with PDomain(SgPtr(dofs))^ do begin Typ:=DTyp; move(Nm,Name,length(Nm)+1) end;
   MakeDomain:=dofs;
 end;
 function GetDomain(Create:boolean;Nm:string):word;
 var d,d1,d2:PDomain; dofs:word absolute d; d1ofs:word absolute d1;
     d2ofs:word absolute d2;
 begin
-  d:=ptr(_Sg,Roots^.Domains);
+  d:=SgPtr(Roots^.Domains);
   while (dofs<>0) and (d^.Name<>Nm) do dofs:=d^.Chain;
   if dofs=0 then
     if copy(Nm,1,2)='L_' then begin
-      d1:=ptr(_Sg,GetOrigDomain(GetDomain(Create,copy(Nm,3,255))));
+      d1:=SgPtr(GetOrigDomain(GetDomain(Create,copy(Nm,3,255))));
       if d1ofs=0 then Error(517); Nm:='L_'+d1^.Name;
-      d:=ptr(_Sg,Roots^.Domains);
+      d:=SgPtr(Roots^.Domains);
       while (dofs<>0) and (d^.Name<>Nm) do dofs:=d^.Chain;
       if dofs=0 then begin
         dofs:=MakeDomain(_ListD,Nm); d^.ElemDom:=d1ofs end
@@ -515,7 +575,7 @@ var d:PDomain; dofs:word absolute d; fd:PFunDcl; fdofs:word absolute fd;
     d1:word; a:array[0..31] of word; nm,dofs2:word; n:byte; i:integer;
 label 1,2,3,4;
 begin
-  PtrRec(d).Seg:=_Sg; PtrRec(fd).Seg:=_Sg;
+  SgFix(d); SgFix(fd);
 1:TestIdentif; dofs:=GetDomain(true,LexWord);
   if d^.Typ<>_UndefD then Error(505);
   RdLex; while Lexem=',' do begin
@@ -552,7 +612,7 @@ begin
 1:dofs:=RdDomain; Accept(':');
 2:TestIdentif; if IsCharUpper(LexWord[1]) then Error(515);
   if FindConst(dofs)<>0 then Error(505);
-  p:=ptr(_Sg,GetZStor(sizeof(TConst)-1+length(LexWord)));
+  p:=SgPtr(GetZStor(sizeof(TConst)-1+length(LexWord)));
   move(LexWord,p^.Name,length(LexWord)+1); RdLex; p^.Dom:=dofs;
   Accept('='); p^.Expr:=RdTerm(dofs,6); ChainLst(Roots^.Consts,pofs);
   if Lexem=',' then begin RdLex; goto 2 end;
@@ -563,11 +623,11 @@ function GetPredicate:word{PPredicate};
 var p:PPredicate; pofs:word absolute p;
 label 1;
 begin
-  PtrRec(p).Seg:=_Sg; pofs:=Roots^.Predicates; while pofs<>0 do begin
-    if LexWord=PString(ptr(_Sg,p^.Name))^ then begin RdLex; goto 1 end;
+  SgFix(p); pofs:=Roots^.Predicates; while pofs<>0 do begin
+    if LexWord=PString(SgPtr(p^.Name))^ then begin RdLex; goto 1 end;
     pofs:=p^.Chain end;
   pofs:=ClausePreds; while pofs<>0 do begin
-    if LexWord=PString(ptr(_Sg,p^.Name))^ then begin RdLex; goto 1 end;
+    if LexWord=PString(SgPtr(p^.Name))^ then begin RdLex; goto 1 end;
     pofs:=p^.Chain end;
 1:GetPredicate:=pofs;
 end;
@@ -593,8 +653,8 @@ var d:PDomain; dofs:word absolute d; p:PPredicate; pofs:word absolute p;
     z:FrmlPtr; zofs:word absolute z;
 label 2,3,33,4;
 begin
-  PtrRec(d).Seg:=_Sg; PtrRec(p).Seg:=_Sg; PtrRec(si).Seg:=_Sg;
-  PtrRec(fl).Seg:=_Sg; PtrRec(ip).Seg:=_Sg;
+  SgFix(d); SgFix(p); SgFix(si);
+  SgFix(fl); SgFix(ip);
   o:=0; if Db<>nil then o:=_DbaseOpt+_CioMaskOpt;
   if Lexem='@' then begin RdLex; o:=o or _FandCallOpt end
   else if Db<>nil then o:=o or _PackInpOpt;
@@ -619,7 +679,7 @@ begin
 3:  if Db<>nil then begin
       if (o and _FandCallOpt)<>0 then begin
       f:=RdFldName(CFile); flofs:=GetZStor(sizeof(TFldList));
-      fl^.FldD:=OPtr(PtrRec(CFile).Seg,f); ChainLst(si^.FL,flofs); dofs:=0;
+      fl^.FldD:=OPtr(SegOf(CFile),f); ChainLst(si^.FL,flofs); dofs:=0;
       Accept('/'); dofs:=RdDomain;
       case f^.FrmlTyp of
        'B':if dofs<>BoolDom then OldError(510);
@@ -641,11 +701,12 @@ begin
   else ChainLst(Roots^.Predicates,pofs);
   if (Db<>nil) then begin p^.ChainDb:=Db^.Pred; Db^.Pred:=pofs end;
   with p^ do begin Name:=nm; Arity:=n; move(a,Arg,2*n); Opt:=o;
-    InpMask:=w; InstSz:=4*n end;
+    InpMask:=w; InstSz:=sizeof(pointer)*n end;
   if (o and _FandCallOpt)<>0 then
   if (o and _DbaseOpt)<>0 then word(p^.Branch):=siofs
-  else begin ipofs:=GetZStor(5+sizeof(RdbPos)+2+n*sizeof(TypAndFrml));
-    ip^.Kind:=_proc; ip^.PPos:=pos; ip^.N:=n; bpOfs:=4;
+  else begin ipofs:=GetZStor({$ifdef FPC}PtrUInt(@InstrPtr(nil)^.TArg){$else}5+sizeof(RdbPos)+2{$endif}+n*sizeof(TypAndFrml));
+    ip^.Kind:=_proc; ip^.PPos:=pos; ip^.N:=n;
+    bpOfs:={$ifdef FPC}sizeof(ProcStkD){$else}4{$endif};
     for i:=1 to n do begin
       dofs:=p^.Arg[i-1];
       if (dofs=RealDom) or (dofs=IntDom) then typ:='R' else
@@ -669,14 +730,27 @@ begin
 end;
 
 function GetCommand(Code:TCommandTyp;N:word):word;
-var c:PCommand; cofs:word absolute c;
+var c:PCommand; cofs:word absolute c; {$ifdef FPC}extra:word;{$endif}
 begin
-  c:=ptr(_Sg,GetZStor(3+N)); c^.Code:=Code; GetCommand:=cofs;
+  {$ifdef FPC}
+  { N is BP7's size of the variant part; the program segment has 64 kB as
+    in BP7, so add only what grew: KDOfs (word -> pointer) past byte 16,
+    FD and FldD (4 -> 8 bytes each) }
+  extra:=0;
+  case Code of
+    _PredC,_AssertC,_RetractC,_AllC: if N>16 then extra:=sizeof(KeyDPtr)-2;
+    _SaveC,_ConsultC,_LoadLexC: extra:=2*(sizeof(pointer)-4);
+  end;
+  c:=SgPtr(GetZStor(PtrUInt(@PCommand(nil)^.Arg)+N+extra));
+  {$else}
+  c:=SgPtr(GetZStor(3+N));
+  {$endif}
+  c^.Code:=Code; GetCommand:=cofs;
 end;
 procedure RdTermList(C:PCommand;D,Kind:word);
 var l:PTermList; lofs:word absolute l;
 begin
-  l:=ptr(_Sg,GetZStor(sizeof(TTermList))); ChainLst(C^.Arg,lofs);
+  l:=SgPtr(GetZStor(sizeof(TTermList))); ChainLst(C^.Arg,lofs);
   l^.Elem:=RdTerm(D,Kind);
 end;
 
@@ -688,8 +762,8 @@ var v:PVarDcl; cm:char; {d:PDomain;} op,fTyp:char; code:TCommandTyp;
     l:PTermList; lofs:word absolute l; n:word; s:string; i:integer;
 label 1,2,20,21,22,3,4,8,9;
 begin
-  PtrRec(p).Seg:=_Sg; c:=ptr(_Sg,0); PtrRec(w).Seg:=_Sg; PtrRec(d).Seg:=_Sg;
-  PtrRec(l).Seg:=_Sg;
+  SgFix(p); c:=SgPtr(0); SgFix(w); SgFix(d);
+  SgFix(l);
   if Lexem='!' then begin
     RdLex; cofs:=GetCommand(_CutC,0); goto 9 end
   else if Lexem<>_identifier then goto 9;
@@ -770,7 +844,7 @@ begin
     move(LexWord,c^.Name,length(LexWord)+1);
     if not IsRoleName(false,fd,ld) then Error(9);
     if fd^.typSQLFile then OldError(155); Accept('.');
-    c^.FldD:=OPtr(PtrRec(fd).Seg,RdFldName(fd));
+    c^.FldD:=OPtr(SegOf(fd),RdFldName(fd));
     if c^.FldD^.Typ<>'T' then OldError(537);
 8:  Accept(')') end;
 9:RdCommand:=cofs;
@@ -784,8 +858,8 @@ var c:PCommand; cofs:word absolute c; p:PPredicate; pofs:word absolute p;
     a:array[1..255] of byte; IsFandDb,inOut:boolean; f:FieldDPtr;
 label 1,2,3;
 begin
-  PtrRec(p).Seg:=_Sg; PtrRec(c).Seg:=_Sg; PtrRec(l).Seg:=_Sg;
-  PtrRec(t).Seg:=_Sg; PtrRec(si).Seg:=_Sg; PtrRec(fl).Seg:=_Sg;
+  SgFix(p); SgFix(c); SgFix(l);
+  SgFix(t); SgFix(si); SgFix(fl);
   pofs:=RdPredicate;
   IsFandDb:=p^.Opt and (_DbaseOpt+_FandCallOpt)=_DbaseOpt+_FandCallOpt;
   if (p^.Opt and _DbaseOpt<>_DBaseOpt) and (Code in [_AssertC,_RetractC])
@@ -823,7 +897,7 @@ begin
       kf:=k^.KFlds; inOut:=false; while kf<>nil do begin
         m:=1; n:=0; inc(i); flofs:=si^.FL; while flofs<>0 do begin
           f:=fl^.FldD; flofs:=fl^.Chain;
-          if f=OPtr(PtrRec(CFile).Seg,kf^.FldD) then begin
+          if f=OPtr(SegOf(CFile),kf^.FldD) then begin
             w:=w or m; a[i]:=n;
             if (flofs<>0) and (f=fl^.FldD) and ((OutpMask and (m shl 1))<>0)
                and (f^.Typ='A') then inOut:=true;
@@ -839,7 +913,8 @@ begin
      c^.InpMask:=InpMask; c^.OutpMask:=OutpMask;
      if IsFandDb then begin c^.CompMask:=InpMask and not w;
        if i>0 then begin
-         move(a,c^.ArgI,i); c^.KDOfs:=word(OPtr(PtrRec(CFile).Seg,k)) end end end;
+         move(a,c^.ArgI,i);
+         {$ifdef FPC}c^.KDOfs:=k{$else}c^.KDOfs:=word(OPtr(SegOf(CFile),k)){$endif} end end end;
    RdPredCommand:=cofs;
 end;
 procedure RdDbTerm(DOfs:word);
@@ -847,10 +922,10 @@ var p:Pchar absolute PackedTermPtr; i:integer; n:word; wp:WordPtr; d:PDomain;
     s:string[32]; minus:boolean; r:float; f:PFunDcl; idx:byte;
 label 1,2,3;
 begin
-  d:=ptr(_Sg,DOfs); if PtrRec(p).Ofs>=PTPMaxOfs then Error(527);
+  d:=SgPtr(DOfs); if AdrOfs(p)>=PTPMaxOfs then Error(527);
   case Lexem of
     _quotedstr: begin if d^.Typ<>_StrD then Error(510);
-            n:=length(LexWord)+1; if PtrRec(p).Ofs+n>=PTPMaxOfs then Error(527);
+            n:=length(LexWord)+1; if AdrOfs(p)+n>=PTPMaxOfs then Error(527);
             move(LexWord,p^,n); inc(p,n); RdLex end;
     '$': if d^.Typ<>_IntD then Error(510) else begin
          i:=0; while ForwChar in ['0'..'9','a'..'f','A'..'F'] do begin
@@ -868,7 +943,8 @@ begin
            if d^.Typ<>_RealD then Error(510);
            if (Lexem='.') and IsDigit(ForwChar) then begin
              RdLex; s:=s+'.'+LexWord; RdLex end;
-           val(s,r,i); FloatPtr(p)^:=r; inc(p,sizeof(float)) end end;
+           val(s,r,i); {$ifdef FPC}if minus then r:=-r;{$endif}
+           {$ifdef FPC}FloatToReal48(r,p); inc(p,6){$else}FloatPtr(p)^:=r; inc(p,sizeof(float)){$endif} end end;
     '['       : begin if d^.Typ<>_ListD then Error(510); RdLex;
             wp:=WordPtr(p); inc(p,2); n:=0;
             if Lexem<>']' then begin
@@ -889,19 +965,19 @@ begin
   Accept('('); t:=Pchar(@A); PTPMaxOfs:=ofs(A)+MaxPackedPredLen-2;
   for i:=0 to P^.Arity-1 do begin
     if i>0 then Accept(','); wp:=WordPtr(t); inc(t,2); RdDbTerm(p^.Arg[i]);
-    wp^:=PtrRec(t).Ofs-PtrRec(wp).Ofs-2 end;
-  n:=PtrRec(t).Ofs-Ofs(A); b:=Mem3.Alloc(4+n); move(A,b^.LL,n);
+    wp^:=AdrOfs(t)-AdrOfs(wp)-2 end;
+  n:=AdrOfs(t)-AdrOfs(@A); b:=Mem3.Alloc(sizeof(pointer)+n); move(A,b^.LL,n);
   ChainLast(P^.Branch,b); Accept(')'); Accept('.');
 end;
 procedure CheckPredicates(POff:word);
 var p:PPredicate; pofs:word absolute p; si:PScanInf;
 begin
-  p:=ptr(_Sg,POff); while pofs<>0 do begin
+  p:=SgPtr(POff); while pofs<>0 do begin
     if (p^.Opt and (_DBaseOpt+_FandCallOpt+_BuildInOpt)=0) and (p^.Branch=nil)
-      then begin SetMsgPar(PString(ptr(_Sg,p^.name))^); OldError(522) end;
+      then begin SetMsgPar(PString(SgPtr(p^.name))^); OldError(522) end;
     if p^.Opt and _DBaseOpt<>0 then
       if p^.Opt and _FandCallOpt<>0 then begin
-        si:=ptr(_Sg,word(p^.Branch)); si^.FD:=nil end
+        si:=SgPtr(word(p^.Branch)); si^.FD:=nil end
       else p^.Branch:=nil;
     pofs:=p^.Chain end;
 end;
@@ -913,10 +989,10 @@ var l,l1:PTermList; w:word; c:PCommand; t:PPTerm; d:PDomain; v:PVarDcl;
 label 1;
 begin
   if p^.Opt<>0 then Error(550);
-  PtrRec(c).Seg:=_Sg; PtrRec(l).Seg:=_Sg; PtrRec(l1).Seg:=_Sg;
-  PtrRec(t).Seg:=_Sg; PtrRec(d).Seg:=_Sg;
-  cofs:=GetCommand(_AutoC,2+3+6*2); b^.Cmd:=cofs; inc(p^.InstSz,4);
-  c^.iWrk:=(p^.InstSz div 4)-1; w:=p^.InpMask;
+  SgFix(c); SgFix(l); SgFix(l1);
+  SgFix(t); SgFix(d);
+  cofs:=GetCommand(_AutoC,2+3+6*2); b^.Cmd:=cofs; inc(p^.InstSz,sizeof(pointer));
+  c^.iWrk:=(p^.InstSz div sizeof(pointer))-1; w:=p^.InpMask;
   for i:=0 to p^.Arity-1 do begin
     if w and 1<>0 then isInput:=true else isInput:=false;
     lofs:=GetZStor(sizeof(TTermList)); ChainLst(c^.Arg,lofs);
@@ -951,10 +1027,10 @@ var v:PVarDcl; c:PCommand; cofs:word absolute c; x:char;
     bofs:word absolute B;
 label 1,2,3;
 begin
-  RdLex; PtrRec(c).Seg:=_Sg;
+  RdLex; SgFix(c);
   if IsUpperIdentif then begin x:='a';
     v:=FindVarDcl; if p^.InpMask<>(1 shl (p^.Arity-1))-1 then Error(562);
-    if (v=nil) or v^.Bound or (PDomain(ptr(_Sg,v^.Dom))^.Typ<>_ListD) then Error(561);
+    if (v=nil) or v^.Bound or (PDomain(SgPtr(v^.Dom))^.Typ<>_ListD) then Error(561);
     RdLex; Accept('+'); Accept('='); v^.Bound:=true;
     cofs:=GetCommand(_AppPkC,6); c^.apIdx:=v^.Idx;
     c^.apTerm:=RdTerm(v^.Dom,2); ChainLst(b^.cmd,cofs);
@@ -987,9 +1063,9 @@ type SF=record BP:word; case byte of 0:(Ret:pointer); 1:(RetOfs:word) end;
 var z:^SF; zofs:word absolute z; WasNotC:boolean;
 label 1,11,2,3,4,6;
 begin
-  PtrRec(d).Seg:=_Sg; PtrRec(dEl).Seg:=_Sg; PtrRec(p).Seg:=_Sg;
-  PtrRec(l).Seg:=_Sg; PtrRec(c).Seg:=_Sg; PtrRec(b).Seg:=_Sg;
-  PtrRec(t).Seg:=_Sg; PtrRec(p1).Seg:=_Sg;
+  SgFix(d); SgFix(dEl); SgFix(p);
+  SgFix(l); SgFix(c); SgFix(b);
+  SgFix(t); SgFix(p1);
 1:if Lexem=':' then begin RdLex; RdPredicateDcl(true,nil); goto 6 end;
   TestIdentif; pofs:=RdPredicate;
   if p^.Opt and (_FandCallOpt+_BuildInOpt)<>0 then OldError(529);
@@ -1044,7 +1120,7 @@ begin
     if not v^.Used or not v^.Bound then begin
       SetMsgPar(v^.Name); if not v^.Used then OldError(521) else OldError(520) end;
     v:=v^.Chain end;
-  p^.InstSz:=maxw(p^.InstSz,4*VarCount);
+  p^.InstSz:=maxw(p^.InstSz,sizeof(pointer)*VarCount);
   Mem1.Release(x);
 6:if not (Lexem in [^z,'#']) then goto 1;
   CheckPredicates(ClausePreds); ClausePreds:=0;
@@ -1053,7 +1129,7 @@ end;
 function MakePred(const PredName,ArgTyp:string; PredKod,PredMask:word):word;
 var p:PPredicate; pofs:word absolute p; i,n,dofs:word;
 begin
-  n:=length(ArgTyp); p:=ptr(_Sg,GetZStor(sizeof(TPredicate)-6+n*2));
+  n:=length(ArgTyp); p:=SgPtr(GetZStor(sizeof(TPredicate)-6+n*2));
   ChainLst(Roots^.Predicates,pofs); MakePred:=pofs;
   with p^ do begin
     Name:=StorStr(PredName); Arity:=n; LocVarSz:=PredKod;
@@ -1064,7 +1140,7 @@ begin
       Arg[i-1]:=dofs end;
     if PredMask=$ffff then Opt:=_BuildInOpt+_CioMaskOpt else begin
       Opt:=_BuildInOpt; InpMask:=PredMask end;
-    InstSz:=n*4 end;
+    InstSz:=n*sizeof(pointer) end;
 end;
 
 function ReadProlog(RecNr:word):word;
@@ -1073,19 +1149,24 @@ const Booln:string[7]='Boolean';
 var db:PDatabase; dbofs:word absolute db; p:PPredicate; pofs:word absolute p;
     d:PDomain; dofs:word absolute d; f:PFunDcl; fofs:word absolute f;
     s:string; pos:RdbPos; ss:LongStrPtr; p1,p2,pp1,pp2,pp3,cr:pointer;
-    AA:longint;
+    AA:longint; oldSgMark:word;
 begin
-  MarkBoth(p1,p2); cr:=CRecPtr;
+  {$ifdef FPC}
+  { outside a running lproc no compiled program is in use: a compile in the
+    developer environment would otherwise keep its slot for the session }
+  if ProlgCallLevel=0 then SgRelease(0);
+  {$endif}
+  MarkBoth(p1,p2); cr:=CRecPtr; oldSgMark:=SgMark;
   if ProlgCallLevel=0 then begin
     FreeMemList:=nil; Mem1.Init; Mem2.Init; Mem3.Init end
   else begin
     pp1:=Mem1.Mark; pp2:=Mem2.Mark; pp3:=Mem3.Mark end;
-  AlignLongStr; ss:=GetStore(2); AA:=AbsAdr(@ss^.A);
-  _Sg:=PtrRec(HeapPtr).Seg; ReadProlog:=_Sg;
-  PtrRec(db).Seg:=_Sg; PtrRec(p).Seg:=_Sg; PtrRec(d).Seg:=_Sg;
-  PtrRec(f).Seg:=_Sg; ClausePreds:=0;
+  {$ifdef FPC}AlignSegment(2){$else}AlignLongStr{$endif}; ss:=GetStore(2); AA:=AbsAdr(@ss^.A);
+  _Sg:={$ifdef FPC}SgRegister(@ss^.A){$else}PtrRec(HeapPtr).Seg{$endif}; ReadProlog:=_Sg;
+  SgFix(db); SgFix(p); SgFix(d);
+  SgFix(f); ClausePreds:=0;
   Roots:=GetZStore(sizeof(TProgRoots));
-  UnderScoreTerm:=GetZStor(1); PPTerm(ptr(_Sg,UnderScoreTerm))^.Fun:=_UnderscT;
+  UnderScoreTerm:=GetZStor(1); PPTerm(SgPtr(UnderScoreTerm))^.Fun:=_UnderscT;
   StrDom:=MakeDomain(_StrD,'String');
   LongStrDom:=MakeDomain(_LongStrD,'LongString');
   IntDom:=MakeDomain(_IntD,'Integer');
@@ -1132,17 +1213,17 @@ begin
     if IsKeyWord('PREDICATES') then
       repeat RdPredicateDcl(false,nil) until (Lexem in [^z,'#'])
     else begin AcceptKeyWord('CLAUSES'); RdClauses end end;
-  if AbsAdr(HeapPtr)-AA>MaxLStrLen then OldError(544);
+  if AbsAdr(HeapTop)-AA>MaxLStrLen then OldError(544);
   dbofs:=Roots^.Databases; while dbofs<>0 do begin
     db^.SOfs:=word(OPtr(_Sg,SaveDb(dbofs,AA)));
     dbofs:=db^.Chain end;
   CheckPredicates(Roots^.Predicates);
-  ss^.LL:=AbsAdr(HeapPtr)-AA;
+  ss^.LL:=AbsAdr(HeapTop)-AA; {$ifdef FPC}SgLen[_Sg]:=ss^.LL;{$endif}
   if ProlgCallLevel=0 then ReleaseStore2(p2) else begin
     Mem1.Release(pp1); Mem2.Release(pp2); Mem3.Release(pp3) end;
   if RecNr<>0 then begin
     CFile:=Chpt; CRecPtr:=cr; StoreChptTxt(ChptOldTxt,ss,true);
-    WriteRec(RecNr); ReleaseStore(p1) end;
+    WriteRec(RecNr); ReleaseStore(p1); SgRelease(oldSgMark) end;
 end;
 
 end.

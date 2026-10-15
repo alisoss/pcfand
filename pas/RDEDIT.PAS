@@ -27,7 +27,7 @@ begin
 
 procedure SToSL(var SLRoot;s:string);
   var SL:StringList;
-  begin SL:=GetStore(length(s)+5); SL^.S:=s; ChainLast(SLRoot,SL) end;
+  begin SL:=GetStore(length(s)+1+sizeof(StringList)); SL^.S:=s; ChainLast(SLRoot,SL) end;
 
 procedure StoreRT(Ln:word;SL:StringList;NFlds:word);
   var RT:ERecTxtDPtr;
@@ -317,7 +317,14 @@ var D:EFldDPtr; FL:FieldList; p:pointer;                { NewEditD - body }
     i:word; s:string; F:FieldDPtr; b,b2,F2NoUpd:boolean;
 begin
   PushEdit; MarkStore2(p); with E^ do begin
+{$ifdef FPC}
+  WFlags:=EO^.WFlags; ExD:=EO^.ExD; Journal:=EO^.Journal;
+  ViewName:=EO^.ViewName; OwnerTyp:=EO^.OwnerTyp; DownLD:=EO^.DownLD;
+  DownLV:=EO^.DownLV; DownRecPtr:=EO^.DownRecPtr; LVRecPtr:=EO^.LVRecPtr;
+  KIRoot:=EO^.KIRoot; SQLFilter:=EO^.SQLFilter; SelKey:=WKeyDPtr(EO^.SelKey);
+{$else}
   Move(EO^.WFlags,WFlags,ofs(SelKey)-ofs(WFlags)+4);
+{$endif}
   Attr:=RunWordImpl(EO^.ZAttr,colors.dTxt);
   dNorm:=RunWordImpl(EO^.ZdNorm,colors.dNorm);
   dHiLi:=RunWordImpl(EO^.ZdHiLi,colors.dHiLi);

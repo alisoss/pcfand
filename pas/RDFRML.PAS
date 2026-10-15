@@ -25,6 +25,21 @@ begin
 end;
 
  const MaxLen=9;
+{$ifdef FPC}
+function IsFun(var XFun;N:byte;var XCode;var FunCode:char):boolean;
+type TFunArr=array[0..255] of string[MaxLen];
+     TCodeArr=array[0..255] of char;
+var i:byte; lw:string;
+begin
+  IsFun:=false;
+  lw:=LexWord;
+  for i:=1 to length(lw) do
+    if (lw[i]>='A') and (lw[i]<='Z') then lw[i]:=chr(ord(lw[i])+32);
+  for i:=0 to N-1 do
+    if lw=TFunArr(XFun)[i] then begin
+      FunCode:=TCodeArr(XCode)[i]; RdLex; IsFun:=true; exit end;
+end;
+{$else}
 function IsFun(var XFun;N:byte;var XCode;var FunCode:char):boolean; assembler;
 asm  les bx,XFun; lea dx,LexWord[1]; mov ch,LexWord.byte; xor cl,cl; cld;
 @1:  mov ah,es:[bx]; cmp ah,ch; jne @4; mov si,dx; mov di,bx; inc di;
@@ -37,6 +52,7 @@ asm  les bx,XFun; lea dx,LexWord[1]; mov ch,LexWord.byte; xor cl,cl; cld;
      call RdLex; mov ax,1;
 @7:
 end;
+{$endif}
 const R0FunN=16;          { alphabetic ordered lower case names }
       R0Fun:array[1..R0FunN]of string[MaxLen]=('cprinter','currtime',
                'edrecno','exitcode','getmaxx','getmaxy',
@@ -250,7 +266,7 @@ function RdMult(var FTyp:char):FrmlPtr;
       case Lexem of
        '*':begin Z:=GetOp(_times,0);goto 2 end;
        '/':begin Z:=GetOp(_divide,0);
-               2:TestReal(FTyp);RdLex;Z^.P1:=Z1;Z^.P2:=RdPrim(FTyp);;
+               2:TestReal(FTyp);RdLex;Z^.P1:=Z1;Z^.P2:=RdPrim(FTyp);
                  TestReal(FTyp); goto 1 end;
        _identifier:if EquUpcase(QQdiv) then begin Z:=GetOp(_div,0);goto 2 end
            else if EquUpcase(QQmod) then begin Z:=GetOp(_mod,0);goto 2 end

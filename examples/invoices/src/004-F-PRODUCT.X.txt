@@ -1,0 +1,4 @@
+{ products and their prices }
+Code:A,6; Name:A,30; Unit:A,4; Price:F,9.2;
+#K @ Code;
+#L Price>=0 : 'the price cannot be negative';

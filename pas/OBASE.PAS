@@ -24,10 +24,12 @@ uses base,obaseww,drivers,wwmenu;
 
 
 procedure Ovr; far;
+{$ifdef FPC}begin end;{$else}
 assembler;
 asm   pop ax; pop ax; pop ax{bp}; push ax; push ax; call StackOvr;
       pop bp; pop ds; pop ax; pop dx; pop sp; push cs; push ax;
 end;
+{$endif}
 
 
 var SFlag,QFlag,WFlag,BFlag,DFlag,EFlag,AFlag,XFlag,VFlag,TFlag:boolean;
@@ -45,6 +47,10 @@ begin
   IsPrintCtrl:= (C in [^s,^q,^w,^b,^d,^e,^a,^x,^v,^t])
 end;
 
+{$ifdef FPC}
+procedure PrintByte(B:byte);
+begin with printer[prCurr] do if Handle<>$ff then WriteH(Handle,1,B) end;
+{$else}
 procedure PrintByte(B:byte);
 const timeout=$01;errorio=$08;
       selected=$10;outofpaper=$20;acknowledge=$40;notbusy=$80;
@@ -67,6 +73,7 @@ begin
 3:  F10SpecKey:=_ESC_;WrLLF10Msg(N);
     if KbdChar=_ESC_ then GoExit else goto 2 end;
 end;
+{$endif}
 procedure PrintByteStr(S:string);
   var i:word;
   begin for i:=1 to Length(S) do PrintByte(ord(S[i])) end;
@@ -135,21 +142,33 @@ end;
 function OpenLPTHandle:word;
 var nr:string;
 begin
- str(printer[prCurr].Lpti,nr); CPath:='LPT'+nr;
+ str(printer[prCurr].Lpti,nr);
+ {$ifdef FPC}
+ CPath:='LPT'+nr+'.PRN'; CVol:='';
+ {$else}
+ CPath:='LPT'+nr;
+ {$endif}
  OpenLPTHandle:=OpenH(_isoverwritefile,Exclusive);
 end;
 function ResetPrinter(PgeLength,LeftMargin:word;Adj,Frst:boolean):boolean;
 var er:ExitRecord; s:string[5];
 label 1;
 begin
-  ResetPrinter:=false; NewExit(Ovr,er); goto 1;
+  ResetPrinter:=false;
+  {$ifdef FPC}Move(ExitBuf,er,sizeof(ExitRecord)); ExitBuf.OvrEx:=Ovr; ExitBuf.ExP:=ExitP; ExitBuf.BrkP:=BreakP;
+  ExitBuf.mBP:=MyBP; if SetJmp(ExitBuf.JmpBuf)<>0 then begin GoExitFired:=true; goto 1 end else GoExitFired:=false;
+  KeepInMemory([@PgeLength,@LeftMargin,@Adj,@Frst,@s]);{$else}NewExit(Ovr,er); goto 1;{$endif}
   if Adj then
     if spec.ChoosePrMsg then begin
       if not printer[prCurr].ToHandle then PrintStr(^h^h) end
     else if not printer[prCurr].ToHandle then begin
       PrintStr(^h^h); F10SpecKey:=_ESC_; WrLLF10Msg(10);{adjust printer}
       if KbdChar=_ESC_ then goto 1 end;
+  {$ifdef FPC}
+  with printer[prCurr] do Handle:=OpenLPTHandle;
+  {$else}
   with printer[prCurr] do if ToHandle then Handle:=OpenLPTHandle;
+  {$endif}
   if Frst then begin
     PrintByteStr(PrTab(prReset)); if length(PrTab(prPageSizeNN))>0 then begin
       PrintByteStr(PrTab(prPageSizeNN));
@@ -175,8 +194,12 @@ begin
     PrintByteStr(PrTab(prLMargTrail)) end;
   if PrTab(prClose)<>'ff' then PrintByteStr(PrTab(prClose)); {Mark***}
   with printer[prCurr] do
+  {$ifdef FPC}
+  if Handle<>$ff then begin CloseH(Handle); Handle:=$ff end;
+  {$else}
   if ToHandle then CloseH(Handle) else
   if OpCls then CloseH(OpenLPTHandle);
+  {$endif}
 end;
 
 var PrintCtrlFlag:boolean;
@@ -184,7 +207,7 @@ procedure TestTxtHError(var F:TextRec);
 var s:string;
 begin
   if HandleError<>0 then begin
-    SetMsgPar(StrPas(F.Name)); WrLLF10Msg(700+HandleError); GoExit end;
+    SetMsgPar({$ifdef FPC}string(F.Name){$else}StrPas(F.Name){$endif}); WrLLF10Msg(700+HandleError); GoExit end;
 end;
 function InputTxt(var F:TextRec):integer; far;
     begin with F do begin
@@ -198,11 +221,11 @@ begin
     p:=GetStore(1024); x1:=pointer(F.BufPtr); x2:=p; n:=0;
     while F.BufPos>0 do begin
       case CPTest(x1^) of
-        0: begin x2^:=x1^; inc(n); inc(x2ofs) end;
-        1:begin x2^:=x1^; inc(n); TranslateCodePage(x2^); inc(x2ofs) end;
+        0: begin x2^:=x1^; inc(n); {$ifdef FPC}inc(x2){$else}inc(x2ofs){$endif} end;
+        1:begin x2^:=x1^; inc(n); TranslateCodePage(x2^); {$ifdef FPC}inc(x2){$else}inc(x2ofs){$endif} end;
         2: begin s:=CtrlToESC(x1^); move(s[1],x2^,length(s));
-           inc(n,length(s)); inc(x2ofs,length(s)) end end;
-      inc(x1ofs); dec(F.BufPos) end;
+           inc(n,length(s)); {$ifdef FPC}inc(x2,length(s)){$else}inc(x2ofs,length(s)){$endif} end end;
+      {$ifdef FPC}inc(x1){$else}inc(x1ofs){$endif}; dec(F.BufPos) end;
     WriteH(F.Handle,n,p^); ReleaseStore(p) end
   else WriteH(F.Handle,F.BufPos,F.BufPtr^);
   F.BufPos:=0; TestTxtHError(F); OutputTxt:=0;
@@ -212,7 +235,7 @@ var c:CharPtr; COfs:word absolute c;
 begin
   with F do begin
     c:=CharPtr(BufPtr); while BufPos>0 do begin
-      if not WasLPTCancel then PrintChar(c^); dec(BufPos); inc(COfs) end end;
+      if not WasLPTCancel then PrintChar(c^); dec(BufPos); {$ifdef FPC}inc(c){$else}inc(COfs){$endif} end end;
   OutputLPT1:=0;
 end;
 function FlushTxt(var F:TextRec):integer; far;
@@ -246,7 +269,9 @@ function RewriteTxt(var F:text;PrintCtrl:boolean):boolean;
         else begin PrintCtrlFlag:=PrintCtrl; TextRec(F).OpenFunc:=@OpenTxt;
            TextRec(F).Handle:=OpenH(_isoverwritefile,Exclusive);
            if HandleError<>0 then begin RewriteTxt:=false;exit end end;
-        Rewrite(F); RewriteTxt:=true end;
+        Rewrite(F);
+        {$ifdef FPC}TextRec(F).LineEnd:=#13#10;{$endif}
+        RewriteTxt:=true end;
 procedure SetPrintTxtPath;
   begin CPath:=WrkDir+'PRINTER.TXT';CVol:='' end;
 

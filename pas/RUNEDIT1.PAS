@@ -130,11 +130,46 @@ end;
 procedure WrEStatus;
 begin
   E^.CFld:=CFld;
-  Move(FirstEmptyFld,E^.FirstEmptyFld,ofs(SelMode)-ofs(FirstEmptyFld)+1) end;
+{$ifdef FPC}
+  E^.FirstEmptyFld:=FirstEmptyFld; E^.VK:=VK; E^.WK:=WK;
+  E^.BaseRec:=BaseRec; E^.IRec:=IRec; E^.IsNewRec:=IsNewRec;
+  E^.Append:=Append; E^.Select:=Select; E^.WasUpdated:=WasUpdated;
+  E^.EdRecVar:=EdRecVar; E^.AddSwitch:=AddSwitch; E^.ChkSwitch:=ChkSwitch;
+  E^.WarnSwitch:=WarnSwitch; E^.SubSet:=SubSet; E^.NoDelTFlds:=NoDelTFlds;
+  E^.WasWK:=WasWK; E^.NoDelete:=NoDelete; E^.VerifyDelete:=VerifyDelete;
+  E^.NoCreate:=NoCreate; E^.F1Mode:=F1Mode; E^.OnlyAppend:=OnlyAppend;
+  E^.OnlySearch:=OnlySearch; E^.Only1Record:=Only1Record; E^.OnlyTabs:=OnlyTabs;
+  E^.NoESCPrompt:=NoESCPrompt; E^.MustESCPrompt:=MustESCPrompt; E^.Prompt158:=Prompt158;
+  E^.NoSrchMsg:=NoSrchMsg; E^.WithBoolDispl:=WithBoolDispl; E^.Mode24:=Mode24;
+  E^.NoCondCheck:=NoCondCheck; E^.F3LeadIn:=F3LeadIn; E^.LUpRDown:=LUpRDown;
+  E^.MouseEnter:=MouseEnter; E^.TTExit:=TTExit; E^.MakeWorkX:=MakeWorkX;
+  E^.NoShiftF7Msg:=NoShiftF7Msg; E^.MustAdd:=MustAdd; E^.MustCheck:=MustCheck;
+  E^.SelMode:=SelMode;
+{$else}
+  Move(FirstEmptyFld,E^.FirstEmptyFld,ofs(SelMode)-ofs(FirstEmptyFld)+1)
+{$endif}
+  end;
 procedure RdEStatus;
 var md:LockMode;
 begin
+{$ifdef FPC}
+  FirstEmptyFld:=E^.FirstEmptyFld; VK:=E^.VK; WK:=E^.WK;
+  BaseRec:=E^.BaseRec; IRec:=E^.IRec; IsNewRec:=E^.IsNewRec;
+  Append:=E^.Append; Select:=E^.Select; WasUpdated:=E^.WasUpdated;
+  EdRecVar:=E^.EdRecVar; AddSwitch:=E^.AddSwitch; ChkSwitch:=E^.ChkSwitch;
+  WarnSwitch:=E^.WarnSwitch; SubSet:=E^.SubSet; NoDelTFlds:=E^.NoDelTFlds;
+  WasWK:=E^.WasWK; NoDelete:=E^.NoDelete; VerifyDelete:=E^.VerifyDelete;
+  NoCreate:=E^.NoCreate; F1Mode:=E^.F1Mode; OnlyAppend:=E^.OnlyAppend;
+  OnlySearch:=E^.OnlySearch; Only1Record:=E^.Only1Record; OnlyTabs:=E^.OnlyTabs;
+  NoESCPrompt:=E^.NoESCPrompt; MustESCPrompt:=E^.MustESCPrompt; Prompt158:=E^.Prompt158;
+  NoSrchMsg:=E^.NoSrchMsg; WithBoolDispl:=E^.WithBoolDispl; Mode24:=E^.Mode24;
+  NoCondCheck:=E^.NoCondCheck; F3LeadIn:=E^.F3LeadIn; LUpRDown:=E^.LUpRDown;
+  MouseEnter:=E^.MouseEnter; TTExit:=E^.TTExit; MakeWorkX:=E^.MakeWorkX;
+  NoShiftF7Msg:=E^.NoShiftF7Msg; MustAdd:=E^.MustAdd; MustCheck:=E^.MustCheck;
+  SelMode:=E^.SelMode;
+{$else}
   Move(E^.FirstEmptyFld,FirstEmptyFld,ofs(SelMode)-ofs(FirstEmptyFld)+1);
+{$endif}
   if VK=nil then OnlySearch:=false;
   CFile:=E^.FD; CRecPtr:=E^.NewRecPtr; CFld:=E^.CFld;
   if CFile^.XF<>nil then HasIndex:=true else HasIndex:=false;
@@ -519,7 +554,10 @@ begin
   WK^.Open(KF,dupl,intvl);
   if OnlyAppend then exit;
   bool:=E^.Cond; ki:=E^.KIRoot; wk2:=nil;
-  MarkStore(p); ok:=false; f:=nil; NewExit(Ovr,er); goto 1;
+  MarkStore(p); ok:=false; f:=nil; {$ifdef FPC}Move(ExitBuf,er,sizeof(ExitRecord)); ExitBuf.OvrEx:=Ovr;
+    ExitBuf.ExP:=ExitP; ExitBuf.BrkP:=BreakP; ExitBuf.mBP:=MyBP; if SetJmp(ExitBuf.JmpBuf)<>0 then begin
+    GoExitFired:=true; goto 1 end else GoExitFired:=false; KeepInMemory([@Scan,@Scan2,@p,@K,@KF,@xx,@dupl,@intvl,@ok,
+    @wk2,@ki,@bool,@l,@f]);{$else}NewExit(Ovr,er); goto 1;{$endif}
   if E^.DownSet then begin
     New(Scan,Init(CFile,E^.DownKey,nil,false));
     if E^.OwnerTyp='i' then Scan^.ResetOwnerIndex(E^.DownLD,E^.DownLV,bool)
@@ -692,11 +730,11 @@ var RPOfs:word absolute RP; l:word; F:FieldDPtr; n:longint; md:LockMode;
 label 1;
 begin
   if E^.Journal=nil then goto 1;   l:=CFile^.RecLen; n:=AbsRecNr(CRec);
-  if (CFile^.XF<>nil) then begin inc(RPOfs);dec(l) end;
+  if (CFile^.XF<>nil) then begin {$ifdef FPC}inc(RP){$else}inc(RPOfs){$endif};dec(l) end;
   CFile:=E^.Journal; CRecPtr:=GetRecSpace; F:=CFile^.FldD;
   s_(F,Upd);F:=F^.Chain;r_(F,int(n));F:=F^.Chain;
   r_(F,int(UserCode));F:=F^.Chain;r_(F,time);F:=F^.Chain;
-  Move(RP^,ptr(seg(CRecPtr^),ofs(CRecPtr^)+F^.Displ)^,l);
+  Move(RP^,{$ifdef FPC}pointer(PtrUInt(CRecPtr)+F^.Displ){$else}ptr(seg(CRecPtr^),ofs(CRecPtr^)+F^.Displ){$endif}^,l);
   md:=NewLMode(CrMode); IncNRecs(1); WriteRec(CFile^.NRecs); OldLMode(md);
   ReleaseStore(CRecPtr); CFile:=E^.FD; CRecPtr:=E^.NewRecPtr;
 1:inc(UpdCount); if UpdCount=E^.SaveAfter then begin SaveFiles; UpdCount:=0 end;

@@ -1,4 +1,4 @@
-{$M 24000,16384,655360 }
+{$ifndef FPC}{$M 24000,16384,655360 }{$endif}
 {$I switches}
 {$A-,B-,F-,G-,I+,O-,R-,S+,V+,X+}
 
@@ -16,13 +16,19 @@ uses dos,
      genrprt,
      editor,expimp,runproc,
      runedi,runproj,runfand
+{$ifdef FandExt}
+     {$I FANDEXT.INC}
+{$endif}
+{$ifdef FandProlog}
+     ,rdprolg,runprolg
+{$endif}
 {$ifdef FandGraph}
      ,rungraph,GrGlob,GrInit,GrMenu,GrMenu1,Gr2D,Gr3DQ,Gr3DD,GrPoly,GrTransF
-     ,rdprolg,runprolg
 {$endif}
      ;
 
 
+{$ifndef FPC}
 {$O obase}
 {$O obaseww}
 {$O oaccess}
@@ -63,8 +69,12 @@ uses dos,
 {$O GrPoly}
 {$O GrTransF}
 {$endif}
+{$endif}
 
 begin
-  asm mov BPBound,bp end;
+  {$ifndef FPC}asm mov BPBound,bp end;{$else}BPBound := 0;{$endif}
   InitRunFand;
+  {$ifdef FPC}
+  System.Halt(0);
+  {$endif}
 end.

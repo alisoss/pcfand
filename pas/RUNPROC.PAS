@@ -26,13 +26,28 @@ uses dos,
      editor,expimp,runedi,runproj,runfand
 {$ifdef FandGraph} ,rungraph {$endif}
 {$ifdef FandProlog},rdprolg,runprolg {$endif}
+{$ifdef FPC}       ,fanddos {$endif}
      ;
 
+{$ifdef FPC}
+procedure RvTrace(const tag:string; const nm:string; p:pointer; fd:FileDPtr);
+var f:text; fn:string;
+begin
+  fn:=Dos.GetEnv('FAND_RV_TRACE'); if fn='' then exit;
+  assign(f,fn); {$I-} System.Append(f); if IOResult<>0 then rewrite(f); {$I+}
+  write(f,'[rv] ',tag,' var=',nm,' file=');
+  if fd=nil then write(f,'<nil> reclen=-') else write(f,fd^.Name,' reclen=',fd^.RecLen);
+  writeln(f,' buf=$',hexstr(QWord(PtrUInt(p)),12));
+  close(f);
+end;
+{$endif}
 procedure Ovr; far;
+{$ifdef FPC}begin end;{$else}
 assembler;
 asm   pop ax; pop ax; pop ax{bp}; push ax; push ax; call StackOvr;
       pop bp; pop ds; pop ax; pop dx; pop sp; push cs; push ax;
 end;
+{$endif}
 
 procedure UserHeadLine(UserHeader:string);
 var n,l,maxlen:word; p:pointer;
@@ -69,7 +84,9 @@ begin
     if Flds=nil then begin
       SetInpTT(RprtPos,true);
       if SyntxChk then begin
-        IsCompileErr:=false; NewExit(Ovr,er); goto 1; ReadReport(RO);
+        IsCompileErr:=false; {$ifdef FPC}Move(ExitBuf,er,sizeof(ExitRecord)); ExitBuf.OvrEx:=Ovr; ExitBuf.ExP:=ExitP;
+          ExitBuf.BrkP:=BreakP; ExitBuf.mBP:=MyBP; if SetJmp(ExitBuf.JmpBuf)<>0 then begin GoExitFired:=true; goto 1 end
+          else GoExitFired:=false; KeepInMemory([@p,@p2,@md,@w]);{$else}NewExit(Ovr,er); goto 1;{$endif} ReadReport(RO);
         LastExitCode:=0;
 1:      RestoreExit(er); IsCompileErr:=false; goto 2 end;
       ReadReport(RO); RunReport(RO) end
@@ -190,8 +207,13 @@ begin
   s:=RunShortStr(PD^.Param); i:=PD^.ProgCatIRec; CVol:='';
   if i<>0 then Prog:=RdCatField(i,CatPathName) else Prog:=PD^.ProgPath^;
   b:=OSShell(Prog,s,PD^.NoCancel,PD^.FreeMm,PD^.LdFont,PD^.TextMd);
-  asm mov ah,3; mov bh,0; push bp; int 10H; pop bp; mov x,dl; mov y,dh end;
+  {$ifdef FPC}x:=WhereX+WindMin.X-1; y:=WhereY+WindMin.Y-1;{$else}
+  asm mov ah,3; mov bh,0; push bp; int 10H; pop bp; mov x,dl; mov y,dh end;{$endif}
   PopW(w); gotoxy(x-WindMin.X+1,y-WindMin.Y+1);
+  {$ifdef FPC}
+  if FandDosNotice<>'' then begin
+    MsgLine:=copy(FandDosNotice,1,255); FandDosNotice:=''; WrLLF10MsgLine end;
+  {$endif}
   if not b then GoExit;
 end;
 procedure CallRdbProc(PD:InstrPtr);
@@ -216,7 +238,9 @@ procedure IndexfileProc(FD:FileDPtr;Compress:boolean);
 procedure MountProc(CatIRec:word;NoCancel:boolean);
   var er:ExitRecord;
   label 1;
-  begin NewExit(Ovr,er);goto 1;SaveFiles;
+  begin {$ifdef FPC}Move(ExitBuf,er,sizeof(ExitRecord)); ExitBuf.OvrEx:=Ovr; ExitBuf.ExP:=ExitP; ExitBuf.BrkP:=BreakP;
+    ExitBuf.mBP:=MyBP; if SetJmp(ExitBuf.JmpBuf)<>0 then begin GoExitFired:=true; goto 1 end else
+    GoExitFired:=false;{$else}NewExit(Ovr,er); goto 1;{$endif}SaveFiles;
         RdCatPathVol(CatIRec); TestMountVol(CPath[1]);
         LastExitCode:=0; RestoreExit(er); exit;
       1:RestoreExit(er);
@@ -245,7 +269,8 @@ begin
   with MsgS do begin Head:=GetStr(PD^.Head);Last:=GetStr(PD^.Last);
      CtrlLast:=GetStr(PD^.CtrlLast); ShiftLast:=GetStr(PD^.ShiftLast);
      AltLast:=GetStr(PD^.AltLast) end;
-  if PD^.TxtLV<>nil then lp:=Ptr(Seg(MyBP^),Ofs(MyBP^)+PD^.TxtLV^.BPOfs)
+  if PD^.TxtLV<>nil then lp:={$ifdef FPC}pointer(PtrUInt(MyBP)+PD^.TxtLV^.BPOfs){$else}Ptr(Seg(MyBP^),
+    Ofs(MyBP^)+PD^.TxtLV^.BPOfs){$endif}
   else begin SetTxtPathVol(PD^.TxtPath,PD^.TxtCatIRec); lp:=nil end;
   msg:=''; if PD^.ErrMsg<>nil then msg:=RunShortStr(PD^.ErrMsg);
   EditTxtFile(lp,PD^.EdTxtMode,msg,PD^.ExD,I,RunInt(PD^.TxtXY),pv,a,RunShortStr(PD^.Hd),PD^.WFlags,@MsgS);
@@ -255,7 +280,8 @@ procedure PrintTxtProc(PD:InstrPtr);
 var s:LongStrPtr;
 begin with PD^ do begin
   if TxtLV<>nil then begin
-    s:=TWork.Read(1,LongintPtr(Ptr(Seg(MyBP^),Ofs(MyBP^)+TxtLV^.BPOfs))^);
+    s:=TWork.Read(1,LongintPtr({$ifdef FPC}pointer(PtrUInt(MyBP)+TxtLV^.BPOfs){$else}Ptr(Seg(MyBP^),
+      Ofs(MyBP^)+TxtLV^.BPOfs){$endif})^);
     PrintArray(@s^.A,s^.LL,false); ReleaseStore(s) end
   else begin SetTxtPathVol(TxtPath,TxtCatIRec); PrintTxtFile(0) end;
 end end;
@@ -399,7 +425,9 @@ begin
   if Key<>nil then
     if PD^.CWIdx then ScanSubstWIndex(Scan,Key^.KFlds,'W')
     else begin inc(CFile^.XF^.UpdLockCnt); lk:=true end;
-  if LVr<>nil then lr:=LVr^.RecPtr; k:=CFile^.Keys;
+  if LVr<>nil then begin lr:=LVr^.RecPtr;
+    {$ifdef FPC}RvTrace('forall',LVr^.Name,lr,LVr^.FD);{$endif} end;
+  k:=CFile^.Keys;
   b:=PD^.CProcent; if b then RunMsgOn('F',Scan^.NRecs);
 1:{$ifdef FandSQL}if sql then CRecPtr:=lr else {$endif}CRecPtr:=cr;
   Scan^.GetRec; if b then RunMsgN(Scan^.IRec);
@@ -534,7 +562,9 @@ begin
     ScrGraphMode(true,0); SetWwViewPort;
     RunInstr(PD); ScrTextMode(true,false) end;
   ReleaseStore(p);
-end;                                {$ifdef FandGraph}
+end;                                {$ifdef FandGraphParse}{$ifndef FandGraph}
+procedure NoGraphicsProc; begin MsgLine:='grafika nen¡ v t‚to verzi k dispozici'; WrLLMsgTxt end;
+{$endif}{$endif}                    {$ifdef FandGraph}
 procedure DrawProc(PD:InstrPtr);
 var i1,i2,i3,i4,i5,i6,i7,wSize,wDir:integer; op:PInstrCode; c:word;
 label 1;
@@ -596,10 +626,12 @@ begin
   if IsRead then Strm1^.ReadTFld(sqlKey,@xx,sqlFldD)
   else Strm1^.WriteTFld(sqlKey,@xx,sqlFldD) end
 end; {$endif}
+{$ifdef FPC}procedure PortOut(IsWord:boolean;Port:word;What:word); begin end;{$else}
 procedure PortOut(IsWord:boolean;Port:word;What:word); assembler;
   asm mov dx,Port; mov ax,What; cmp IsWord,0; je @1; out dx,ax; jmp @2;
 @1:   out dx,al;
 @2: end;
+{$endif}
 
 procedure WaitProc;
 var w:word;
@@ -609,16 +641,38 @@ end;
 
 {$ifndef FandRunV}
 procedure MemDiagProc;
-  begin writeln(hexptr(HeapPtr),'/',hexptr(HeapEnd),'/',
+  begin
+    {$ifdef FPC}
+    writeln('MemDiag: XMSCachePages=',XMSCachePages);wait
+    {$else}
+    writeln(hexptr(HeapPtr),'/',hexptr(HeapEnd),'/',
                 hexptr(CacheEnd),'/',hexptr(Stack2Ptr),'/',hexw(sptr),'/',
-                longint(XMSCachePages)*CachePageSize);wait end;
+                longint(XMSCachePages)*CachePageSize);wait
+    {$endif}
+  end;
 {$endif}
 
 
+{$ifdef FPC}
+var ITrcF:text; ITrcState:(itUnknown,itOff,itOn);
+procedure ITrc(k:longint);
+var fn:string;
+begin
+  if ITrcState=itOff then exit;
+  if ITrcState=itUnknown then begin
+    fn:=dos.GetEnv('FAND_TRACE_INSTR');
+    if fn='' then begin ITrcState:=itOff; exit end;
+    assign(ITrcF,fn); {$I-} rewrite(ITrcF); {$I+}
+    if IOResult<>0 then begin ITrcState:=itOff; exit end;
+    ITrcState:=itOn end;
+  writeln(ITrcF,k); flush(ITrcF);
+end;
+{$endif}
 procedure RunInstr(PD:InstrPtr);
 var s:LongStrPtr;
 begin
   while not ExitP and not BreakP and (PD<>nil) do begin
+  {$ifdef FPC}ITrc(ord(PD^.Kind));{$endif}
   case PD^.Kind of
    _ifthenelseP:
       with PD^ do if RunBool(Bool) then RunInstr(Instr) else RunInstr(ElseInstr);
@@ -646,7 +700,8 @@ begin
    _writeln:WriteLnProc(PD);
    _gotoxy:with PD^ do gotoxy(RunInt(GoX),RunInt(GoY));
    _merge:MergeProc(PD);                     {$ifdef FandProlog}
-   _lproc:RunProlog(PD^.lpPos,PD^.lpName);   {$endif}
+   _lproc:RunProlog(PD^.lpPos,PD^.lpName);   {$else}{$ifdef FandLProc}
+   _lproc:;                                  {$endif}{$endif}
    _report:ReportProc(PD^.RO,true);
    _sort:with PD^ do SortProc(SortFD,SK);
    _edit:EditProc(PD);
@@ -691,7 +746,9 @@ begin
    _nosound:nosound;                                {$ifdef FandGraph}
    _graph:RunBGraph(PD^.GD,false);
    _putpixel,_line,_rectangle,_ellipse,
-   _floodfill,_outtextxy: DrawProc(PD);             {$endif}
+   _floodfill,_outtextxy: DrawProc(PD);             {$else}{$ifdef FandGraphParse}
+   _graph,_putpixel,_line,_rectangle,_ellipse,
+   _floodfill,_outtextxy: NoGraphicsProc;           {$endif}{$endif}
    _withgraphics: WithGraphicsProc(PD^.WDoInstr);   {$ifndef FandRunV}
    _memdiag:MemDiagProc;                            {$endif}
    _closefds:begin CFile:=PD^.clFD; if CFile=nil then ForAllFDs(ClosePassiveFD)
@@ -756,7 +813,8 @@ begin
     lv:=lv^.Chain end;
   lv1:=lv; while lv<>nil do begin
     if lv^.FTyp='r' then begin CFile:=lv^.FD; CRecPtr:=GetRecSpace;
-      SetTWorkFlag; ZeroAllFlds; ClearDeletedFlag; lv^.RecPtr:=CRecPtr end;
+      SetTWorkFlag; ZeroAllFlds; ClearDeletedFlag; lv^.RecPtr:=CRecPtr;
+      {$ifdef FPC}RvTrace('alloc',lv^.Name,CRecPtr,lv^.FD);{$endif} end;
     lv:=lv^.Chain end;
   ProcMyBP:=MyBP; pd1:=ReadProcBody; FDLocVarAllowed:=false;
   lv:=lv1; while lv<>nil do begin
@@ -768,14 +826,17 @@ begin
   lv:=lvroot; i:=1; while lv<>nil do begin
     if lv^.IsRetPar then begin z:=PD^.TArg[i].Frml;
       case lv^.FTyp of
-       'R': FloatPtr(Ptr(Seg(oldbp^),Ofs(oldbp^)+z^.BPOfs))^:=
-            FloatPtr(Ptr(Seg(MyBP^),Ofs(MyBP^)+lv^.BPOfs))^;
-       'S': begin l:=LongintPtr(Ptr(Seg(oldbp^),Ofs(oldbp^)+z^.BPOfs))^;
-            LongintPtr(Ptr(Seg(oldbp^),Ofs(oldbp^)+z^.BPOfs))^:=
-            LongintPtr(Ptr(Seg(MyBP^),Ofs(MyBP^)+lv^.BPOfs))^;
-            LongintPtr(Ptr(Seg(MyBP^),Ofs(MyBP^)+lv^.BPOfs))^:=l end;
-       'B': BooleanPtr(Ptr(Seg(oldbp^),Ofs(oldbp^)+z^.BPOfs))^:=
-            BooleanPtr(Ptr(Seg(MyBP^),Ofs(MyBP^)+lv^.BPOfs))^ end end;
+       'R': FloatPtr({$ifdef FPC}pointer(PtrUInt(oldbp)+z^.BPOfs){$else}Ptr(Seg(oldbp^),Ofs(oldbp^)+z^.BPOfs){$endif})^:=
+            FloatPtr({$ifdef FPC}pointer(PtrUInt(MyBP)+lv^.BPOfs){$else}Ptr(Seg(MyBP^),Ofs(MyBP^)+lv^.BPOfs){$endif})^;
+       'S': begin l:=LongintPtr({$ifdef FPC}pointer(PtrUInt(oldbp)+z^.BPOfs){$else}Ptr(Seg(oldbp^),
+         Ofs(oldbp^)+z^.BPOfs){$endif})^;
+            LongintPtr({$ifdef FPC}pointer(PtrUInt(oldbp)+z^.BPOfs){$else}Ptr(Seg(oldbp^),Ofs(oldbp^)+z^.BPOfs){$endif})^:=
+            LongintPtr({$ifdef FPC}pointer(PtrUInt(MyBP)+lv^.BPOfs){$else}Ptr(Seg(MyBP^),Ofs(MyBP^)+lv^.BPOfs){$endif})^;
+            LongintPtr({$ifdef FPC}pointer(PtrUInt(MyBP)+lv^.BPOfs){$else}Ptr(Seg(MyBP^),
+              Ofs(MyBP^)+lv^.BPOfs){$endif})^:=l end;
+       'B': BooleanPtr({$ifdef FPC}pointer(PtrUInt(oldbp)+z^.BPOfs){$else}Ptr(Seg(oldbp^),Ofs(oldbp^)+z^.BPOfs){$endif})^:=
+            BooleanPtr({$ifdef FPC}pointer(PtrUInt(MyBP)+lv^.BPOfs){$else}Ptr(Seg(MyBP^),Ofs(MyBP^)+lv^.BPOfs){$endif})^
+              end end;
     if i>n then case lv^.FTyp of
       'r':begin CFile:=lv^.FD; ClearRecSpace(lv^.RecPtr) end;
       'i':begin CFile:=lv^.FD; WKeyDPtr(lv^.RecPtr)^.Close end end;

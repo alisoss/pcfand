@@ -1,3 +1,4 @@
+{$ifdef FPC}{$mode tp}{$endif}
 {$A-,B-,F+,G-,I+,O+,R-,S+,V+,X+,L-}
 
 unit wwmenu;
@@ -398,7 +399,7 @@ function Menu(MsgNr,IStart:word):word;
 var w:PMenuBoxS; p:pointer;
 begin
   MarkStore(p); RdMsg(MsgNr); New(w,Init(0,0,StringPtr(@MsgLine)));
-  Menu:=w^.Exec(IStart); w^.Done; ReleaseStore(p);
+  Menu:=w^.Exec(IStart); {$ifdef FPC}Dispose(w,Done){$else}w^.Done{$endif}; ReleaseStore(p);
 end;
 
 function PrinterMenu(Msg:word):boolean;
@@ -411,7 +412,7 @@ begin
     MsgLine:=MsgLine+'/'+nm+copy('      ',1,maxi(0,9-length(nm)))+lpt end;
   prCurr:=j;
   New(w,Init(0,0,StringPtr(@MsgLine))); i:=w^.Exec(prCurr+1);
-  if i>0 then SetCurrPrinter(i-1); w^.Done; ReleaseStore(p);
+  if i>0 then SetCurrPrinter(i-1); {$ifdef FPC}Dispose(w,Done){$else}w^.Done{$endif}; ReleaseStore(p);
   PrinterMenu:=i>0;
 end;
 
@@ -487,7 +488,7 @@ var w:PMenuBoxP; i:word; mx,my:byte; p:pointer;
 label 1;
 begin
   i:=1; MarkStore(p);
-1:New(w,Init(0,0,nil,PD)); i:=w^.Exec(i); w^.Done; ReleaseStore(p);
+1:New(w,Init(0,0,nil,PD)); i:=w^.Exec(i); {$ifdef FPC}Dispose(w,Done){$else}w^.Done{$endif}; ReleaseStore(p);
   if not PD^.PullDown then begin
     if i=0 then begin
       if not PD^.WasESCBranch then exit; RunInstr(PD^.ESCInstr) end
@@ -514,7 +515,7 @@ begin
   GetDownMenu:=false;
 end;
 function TMenuBar.Exec:word;
-var i:word; w:PMenuBox; enter,down:boolean; r:TRect;
+var i:word; w:PMenuBox; enter,down:boolean; r:TRect;{$ifdef FPC} pm:pointer;{$endif}
 label 1,2,3,4;
 begin
   if nTxt=0 then begin Exec:=0; exit end;
@@ -530,8 +531,10 @@ begin
    else if not FindChar then goto 1; enter:=true;
 2:    WrText(iTxt);
 3:    GetItemRect(iTxt,r); MenuX:=r.A.X+1; MenuY:=r.A.Y+2;
+      {$ifdef FPC}MarkStore(pm);{$endif}
       if GetDownMenu(w) then begin
-        i:=w^.Exec(DownI[iTxt]); w^.Done; ReleaseStore(w);
+        i:=w^.Exec(DownI[iTxt]);
+        {$ifdef FPC}Dispose(w,Done); ReleaseStore(pm);{$else}w^.Done; ReleaseStore(w);{$endif}
         DownI[iTxt]:=lo(i); enter:=false; down:=true;
         if hi(i)=1 then begin i:=iTxt; Prev; WrText(i); goto 2 end;
         if hi(i)=2 then begin i:=iTxt; Next; WrText(i); goto 2 end;

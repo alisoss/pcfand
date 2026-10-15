@@ -141,7 +141,7 @@ begin
   size:=LL-F;
   if F<LL then
     begin if TypeT=FileT then
-      begin SmallerPart(F,size);dec(F,Part.MovI);dec(L,Part.MovI) end;
+      begin SmallerPart(F,size);dec(F,Part.MovI);{$ifdef FPC}dec(LL,Part.MovI){$else}dec(L,Part.MovI){$endif} end;
       if (StoreAvail<=size)or(MaxLenT<=LenT+size) then RunError(404)
 {text prilis dlouhy, nestaci pamet}
       else GetStore(Size);
@@ -179,7 +179,7 @@ function ShortName(Name:pathstr):pathstr;
 var J:word;
     s:pathstr;
 begin J:=length(Name);
-      while not(Name[J]in['\',':'])and(J>0) do dec(J);
+      while not(Name[J]in[{$ifdef FPC}DirectorySeparator{$else}'\'{$endif},':'])and(J>0) do dec(J);
       s:=copy(Name,succ(J),length(Name)-J);
       if Name[2]=':' then s:=copy(Name,1,2)+s;ShortName:=s;
 end;
@@ -403,7 +403,7 @@ procedure CursorWord;
 
 var LockPtr:^byte;
 
-var Regs:registers;
+{$ifndef FPC}var Regs:registers;{$endif}
     i1,i2,i3:word;
 
 begin
@@ -414,8 +414,13 @@ begin
   if TypeT<>FileT then with Part do
     begin AllRd:=true;AbsLenT:=LenT-1;LineP:=0;PosP:=0;LenP:=AbsLenT;
       ColorP:='';UpdP:=false;NullChangePart;SimplePrintHead end;
+  {$ifdef FPC}
+  FirstScroll:=Mode=ViewM;
+  Scroll:=(FirstScroll)and(Mode<>HelpM);
+  {$else}
   LockPtr:=ptr(0,$417);FirstScroll:=Mode=ViewM;
   Scroll:=(((LockPtr^ and $10)<>0)or FirstScroll)and(Mode<>HelpM);
+  {$endif}
   if Scroll then begin ScrL:=NewL(RScrL);ChangeScr:=true end;
   HelpScroll:=Scroll or(Mode=HelpM);if HelpScroll then CrsHide else CrsNorm;
   BCol:=0;BPos:=0;SetScreen(IndT,ScrT,Posi);Konec:=false;

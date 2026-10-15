@@ -2,7 +2,12 @@ function GetOp(Op:char;BytesAfter:integer):FrmlPtr;
 var Z:FrmlPtr; l:word;
 begin
   if Op<#$60 then l:=1 else if Op<#$b0 then l:=5 else if Op<#$f0 then l:=9 else l:=13;
-  Z:=GetZStore(l+BytesAfter); Z^.Op:=Op; GetOp:=Z;
+  {$ifdef FPC}
+  Z:=GetZStore(sizeof(FrmlElem));
+  {$else}
+  Z:=GetZStore(l+BytesAfter);
+  {$endif}
+  Z^.Op:=Op; GetOp:=Z;
 end;
 function FindFldName(FD:FileDPtr):FieldDPtr;
   var F:FieldDPtr;

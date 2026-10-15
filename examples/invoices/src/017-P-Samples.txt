@@ -1,0 +1,31 @@
+{ a few customers, products and invoices to try the task with }
+var c:record of CUSTOMER; p:record of PRODUCT;
+    i:record of INVOICE; t:record of ITEM;
+begin
+  if CUSTOMER.nrecs>0 then begin
+    message('The sample data are already there.'); exit end;
+  PARAM.Company:='Sample Trading Ltd.'; PARAM.VatRate:=21; PARAM.NextNo:=1;
+  readrec(c,0); c.Code:='C001'; c.Name:='Alpha Tools'; c.City:='Prague';
+  c.Phone:='+420 111 222'; writerec(c,0);
+  readrec(c,0); c.Code:='C002'; c.Name:='Beta Builders'; c.City:='Brno';
+  writerec(c,0);
+  readrec(p,0); p.Code:='P001'; p.Name:='Hammer'; p.Unit:='pcs';
+  p.Price:=250; writerec(p,0);
+  readrec(p,0); p.Code:='P002'; p.Name:='Nails, 1 kg'; p.Unit:='kg';
+  p.Price:=89.5; writerec(p,0);
+  readrec(p,0); p.Code:='P003'; p.Name:='Ladder'; p.Unit:='pcs';
+  p.Price:=1490; writerec(p,0);
+  { writerec(..,+) does the additive changes: ITEM adds to INVOICE.Total,
+    INVOICE moves PARAM.NextNo on }
+  readrec(i,0); i.No:=1; i.Issued:=today-30; i.Due:=today-16; i.Cust:='C001';
+  i.Paid:=true; writerec(i,0,+);
+  readrec(i,0); i.No:=2; i.Issued:=today-10; i.Due:=today+4; i.Cust:='C002';
+  writerec(i,0,+);
+  readrec(i,0); i.No:=3; i.Issued:=today-40; i.Due:=today-26; i.Cust:='C002';
+  writerec(i,0,+);
+  readrec(t,0); t.No:=1; t.Prod:='P001'; t.Qty:=4; t.Price:=250; writerec(t,0,+);
+  readrec(t,0); t.No:=1; t.Prod:='P002'; t.Qty:=2; t.Price:=89.5; writerec(t,0,+);
+  readrec(t,0); t.No:=2; t.Prod:='P003'; t.Qty:=1; t.Price:=1490; writerec(t,0,+);
+  readrec(t,0); t.No:=3; t.Prod:='P001'; t.Qty:=10; t.Price:=240; writerec(t,0,+);
+  message('Sample data loaded.');
+end;
